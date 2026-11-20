@@ -3,13 +3,13 @@ namespace Mux.Server
     /// <summary>
     /// The self-contained HTML/CSS/JavaScript markup for the single-page dashboard served at
     /// <c>/dashboard</c>, with <c>__MUX_*__</c> placeholders replaced at render time by
-    /// <see cref="DashboardPage.Render"/>. Kept separate so the page logic stays small and
+    /// <see cref="DashboardPage.Render(string?, string, string?)"/>. Kept separate so the page logic stays small and
     /// readable; all assets are inlined so the page has no external dependencies.
     /// </summary>
     internal static class DashboardTemplate
     {
         /// <summary>
-        /// Dashboard page markup. Placeholders: <c>__MUX_API_KEY__</c>, <c>__MUX_VERSION__</c>,
+        /// Dashboard page markup. Placeholders: <c>__MUX_API_KEY__</c>, <c>__MUX_BASE_PATH__</c>, <c>__MUX_VERSION__</c>,
         /// <c>__LOGO_DARK__</c>, <c>__LOGO_LIGHT__</c>, <c>__LOGO_GREY__</c>, and
         /// <c>__SLASH_COMPLETION_JS__</c>.
         /// </summary>
@@ -54,8 +54,8 @@ body{background:var(--bg);color:var(--text);font-size:14px;line-height:1.5}
 .nav-item.active{background:var(--accent);color:var(--accent-text,#fff)}
 .sidebar-foot{margin-top:auto;padding:12px 18px;color:var(--sidebar-muted);font-size:12px}
 .main{display:flex;flex-direction:column;min-width:0;height:100vh}
-.topbar{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
-.topbar h1{font-size:16px;margin:0;font-weight:600}
+.topbar{height:56px;flex:none;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+.topbar h1{font-size:16px;margin:0;font-weight:600;flex:1 1 auto;min-width:4em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .topbar .right{display:flex;align-items:center;gap:14px;color:var(--muted);font-size:13px}
 .iconbtn{background:none;border:1px solid var(--line);color:var(--text);border-radius:6px;padding:6px 10px;cursor:pointer;font-size:13px}
 .iconbtn:hover{border-color:var(--accent);color:var(--accent)}
@@ -95,11 +95,28 @@ body.resizing-convos{cursor:col-resize;user-select:none}
 .pickrow{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:6px;cursor:pointer}
 .pickrow:hover{background:rgba(127,127,127,.12)}
 .pickrow span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cwd-group{display:inline-flex;align-items:center;flex:0 1 320px;min-width:0}
+.autoapprove{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--muted);cursor:pointer;white-space:nowrap;user-select:none;min-width:0;flex:0 1 auto}.autoapprove span{overflow:hidden;text-overflow:ellipsis}.autoapprove input{margin:0;cursor:inherit}.autoapprove.on{color:var(--text)}.autoapprove.disabled{opacity:.55;cursor:not-allowed}
+.autoapprove-note{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);padding:6px 20px 0}.autoapprove-note[hidden]{display:none}.autoapprove-note::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--warning,#d4a017);flex:none}
+.cwd-input{flex:1 1 auto;min-width:120px;width:100%}
+#cloudCard .row{margin-top:14px}
+#cloudCard .hint{margin-top:-4px}
+#cloudCard .hint.cloud-signup{margin:12px 0 0}
+#cloudCard .cloud-signup a{color:var(--accent);font-weight:600;text-decoration:none}
+#cloudCard .cloud-signup a:hover{text-decoration:underline}
+.btn.cloud-link{text-decoration:none;display:inline-flex;align-items:center}
+.cwd-input:disabled{opacity:.7}
+.cloud-notice{border-left:3px solid var(--accent,#4ade80);padding-left:10px}
+.cloud-status{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-height:32px}
+.cloud-reason{color:var(--muted);font-size:13px;line-height:1.4}
+.cloud-reason:empty{display:none}
+.badge.status.warn{color:var(--warning)}.badge.status.warn::before{background:var(--warning)}
 .chat-title{color:var(--muted);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:40vw}
 @media(max-width:820px){.chatwrap{grid-template-columns:1fr}.convos{display:none}}
 .chat{display:grid;grid-template-rows:auto 1fr auto;height:100%;min-height:0}
-.chat-toolbar{height:64px;box-sizing:border-box;display:flex;align-items:center;gap:12px;padding:0 20px;border-bottom:1px solid var(--line);background:var(--panel)}
+.chat-toolbar{min-height:64px;box-sizing:border-box;display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:6px 20px;border-bottom:1px solid var(--line);background:var(--panel)}
 .chat-toolbar label{font-size:12px;color:var(--muted);margin-right:6px}
+@media(max-width:820px){.chat-toolbar{height:auto;min-height:64px;flex-wrap:wrap;padding:10px 14px;gap:8px 12px}.chat-toolbar #endpointSelect{min-width:0!important;flex:1 1 160px}.cwd-group{flex:1 1 100%}.chat-toolbar .grow{display:none}.chat-title{max-width:100%}}
 select,input,textarea{background:var(--panel);color:var(--text);border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:14px;font-family:inherit}
 select:focus,input:focus,textarea:focus{outline:none;border-color:var(--accent)}
 .grow{flex:1}
@@ -485,6 +502,14 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 .copybtn.icon{padding:3px 8px;font-size:13px;line-height:1}
 .copywrap{position:relative}.copywrap textarea{width:100%;box-sizing:border-box;padding-right:44px}
 .copywrap .fieldcopy{position:absolute;top:6px;right:8px;background:var(--panel,var(--bg));z-index:1}
+/* password and key fields: an eye button inside the field's end edge toggles the value visible */
+.pwwrap{position:relative;display:flex;min-width:0}
+.pwwrap input{flex:1;min-width:0;padding-inline-end:40px}
+.pwwrap input::-ms-reveal{display:none}
+.pwreveal{position:absolute;inset-inline-end:5px;top:50%;transform:translateY(-50%);width:30px;height:28px;padding:0;display:inline-flex;align-items:center;justify-content:center;background:none;border:0;border-radius:5px;color:var(--muted);cursor:pointer}
+.pwreveal:hover{color:var(--accent);background:var(--panel-2)}
+.pwreveal:focus-visible{outline:2px solid var(--accent);outline-offset:0}
+.pwreveal svg{width:17px;height:17px;display:block}
 .langsel{background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:inherit;line-height:1;max-width:150px}
 .langsel:hover{border-color:var(--accent);color:var(--text)}
 .langsel:focus{outline:2px solid var(--accent);outline-offset:1px}
@@ -493,15 +518,30 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 [dir="rtl"] .stattip,[dir="rtl"] .tooltip{direction:rtl}
 [dir="rtl"] .disclaimer,[dir="rtl"] .hint,[dir="rtl"] .desc{text-align:right}
 /* mobile drawer navigation */
-.hamburger{display:none;background:none;border:1px solid var(--line);border-radius:7px;width:34px;height:34px;cursor:pointer;color:var(--text);font-size:17px;align-items:center;justify-content:center}
+.hamburger{display:inline-flex;align-items:center;justify-content:center;flex:none;background:none;border:1px solid var(--line);border-radius:7px;width:34px;height:34px;cursor:pointer;color:var(--text);font-size:17px;align-items:center;justify-content:center}
 .navscrim{display:none}
+@media(min-width:821px){.app.navcollapsed{grid-template-columns:0 minmax(0,1fr)}.app.navcollapsed .sidebar{visibility:hidden}}
 @media(max-width:820px){
   .hamburger{display:inline-flex;align-items:center;justify-content:center}
-  .sidebar{display:flex;position:fixed;left:0;top:0;bottom:0;width:252px;z-index:120;transform:translateX(-100%);transition:transform .2s;box-shadow:0 0 40px rgba(0,0,0,.45)}
-  .app.navopen .sidebar{transform:none}
+  .sidebar{display:flex;position:fixed;left:0;top:0;bottom:0;width:252px;z-index:120;transform:translateX(-100%);transition:transform .2s,box-shadow .2s;box-shadow:none}
+  .app.navopen .sidebar{transform:none;box-shadow:0 0 40px rgba(0,0,0,.45)}
   .navscrim{display:block;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:110;opacity:0;pointer-events:none;transition:opacity .2s}
   .app.navopen .navscrim{opacity:1;pointer-events:auto}
   .padw{padding:16px 14px 40px}.pad{padding:16px 14px}
+  .topbar{padding:0 14px;gap:10px}
+  .topbar h1{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .topbar .right{flex:none;gap:6px}
+}
+/* The header keeps health, language, and palette at every width; the server facts drop out first on narrow screens
+   (they stay on Home), so the page title keeps its room. */
+@media(max-width:1180px){
+  #badgeUptime,#serverUrl,#copyUrlBtn{display:none!important}
+  .topbar .langsel{max-width:112px}
+}
+@media(max-width:480px){
+  #badgeVersion,.topbar a.iconbtn{display:none!important}
+  .topbar{padding:0 10px}
+  .topbar .langsel{max-width:96px}
 }
 </style>
 </head>
@@ -539,8 +579,8 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
   </aside>
   <main class="main">
     <header class="topbar">
-      <button class="hamburger" id="hamburger" title="Show navigation" aria-label="Show navigation">☰</button>
-      <h1 id="viewTitle">Chat</h1>
+      <button class="hamburger" id="hamburger" title="Hide navigation" aria-label="Hide navigation" aria-expanded="true">☰</button>
+      <h1 id="viewTitle">Home</h1>
       <div class="right">
         <span class="badge status" id="statusPill" title="Live health of the mux REST server, polled every few seconds">…</span>
         <span class="badge" id="badgeVersion" title="The version of mux running this server"></span>
@@ -605,6 +645,10 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
             <span><label title="The model endpoint this chat runs against" data-i18n="chat.endpoint">Endpoint</label></span>
             <select id="endpointSelect" style="min-width:260px" title="Choose which configured model endpoint answers your messages"></select>
             <span id="modelStatus" class="model-status" title="Whether the selected model is loaded and ready"></span>
+            <span class="cwd-group"><label for="cwdInput" title="The folder this conversation's tools run in" data-i18n="chat.folder">Folder</label>
+            <input id="cwdInput" list="cwdList" class="cwd-input" autocomplete="off" spellcheck="false" placeholder="Default folder" data-i18n-ph="chat.folder.ph" data-i18n-title="chat.folder.tip" title="Pick a recent folder or type any folder path on this machine for a new conversation. An open conversation keeps the folder it started in.">
+            <datalist id="cwdList"></datalist></span>
+            <label class="autoapprove" id="autoApproveWrap"><input type="checkbox" id="autoApprove"><span data-i18n="chat.autoApprove">Auto-approve tools</span></label>
             <span class="grow"></span>
             <span id="chatTitle" class="chat-title" title="The current conversation"></span>
           </div>
@@ -612,6 +656,7 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
             <div class="empty" id="chatEmpty" data-i18n="chat.empty">Pick an endpoint and start chatting with your model.</div>
           </div>
           <div>
+            <div class="autoapprove-note" id="autoApproveNote" hidden data-i18n="chat.autoApprove.on">Auto-approve is on: tools run without asking.</div>
             <div class="composer">
               <div id="slash-completions" class="slash-completion" hidden></div>
               <textarea id="composer" rows="1" placeholder="Message your model… (Enter to send, Shift+Enter for newline)" title="Type a message. Enter sends it; Shift+Enter inserts a newline."></textarea>
@@ -770,7 +815,28 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
           <div class="field"><label>Port</label><input type="number" id="s_rest_port" title="The TCP port the REST server listens on (1-65535). Restart required." min="1" max="65535"></div>
           <div class="field"><label>SSL</label><input type="checkbox" id="s_rest_ssl" title="Serve over HTTPS instead of HTTP. Restart required."></div>
           <div class="field"><label>CORS allow-origin</label><input type="text" id="s_rest_corsAllowOrigin" title="The Access-Control-Allow-Origin value the server returns."></div>
-          <div class="field"><label>API key <span class="sub" id="apiKeyState"></span></label><input type="password" id="s_rest_apiKey" title="The bearer token required by the API. Never shown; leave blank to keep the current key." placeholder="(unchanged)"></div>
+          <div class="field"><label>API key <span class="sub" id="apiKeyState"></span></label><div class="pwwrap"><input type="password" id="s_rest_apiKey" title="The bearer token required by the API. Never shown; leave blank to keep the current key." placeholder="(unchanged)" autocomplete="off" spellcheck="false"><button type="button" class="pwreveal" data-pw-kind="key"></button></div></div>
+        </div>
+        <div class="card" id="cloudCard">
+          <h2 data-i18n="cloud.title">Mux Cloud</h2>
+          <p class="hint" data-i18n="cloud.desc">Use this machine from a browser on another computer or from your phone. Conversations stay on this machine; Mux Cloud passes them through.</p>
+          <p class="hint cloud-notice" data-i18n="cloud.notice">Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn off remote tool approval after signing in.</p>
+          <div class="field"><label data-i18n="cloud.statusLbl">Status</label><div class="cloud-status"><span id="cloud_status" class="badge status"></span><span id="cloud_reason" class="cloud-reason"></span></div></div>
+          <div id="cloud_signedOut" hidden>
+            <div class="field"><label data-i18n="cloud.email">Email</label><input type="email" id="cloud_email" autocomplete="username"></div>
+            <div class="field"><label data-i18n="cloud.password">Password</label><div class="pwwrap"><input type="password" id="cloud_password" autocomplete="current-password"><button type="button" class="pwreveal" data-pw-kind="password"></button></div></div>
+            <div class="field"><label data-i18n="cloud.server">Server</label><input type="text" id="cloud_server" title="The Mux Cloud server, https://app.usemux.ai unless you run your own."></div>
+            <div class="field"><label data-i18n="cloud.machineName">Machine name</label><input type="text" id="cloud_machineName" title="How this machine is listed in Mux Cloud."></div>
+            <div class="row"><button class="btn" id="cloudSignInBtn" data-i18n="cloud.signIn">Sign in</button></div>
+            <p class="hint cloud-signup"><span data-i18n="cloud.noAccount">No account yet?</span> <a id="cloud_signup" href="https://app.usemux.ai/signup" target="_blank" rel="noopener">app.usemux.ai/signup</a></p>
+          </div>
+          <div id="cloud_signedIn" hidden>
+            <div class="field"><label data-i18n="cloud.account">Account</label><span id="cloud_account"></span></div>
+            <div class="field"><label data-i18n="cloud.machine">Machine</label><span id="cloud_machine"></span></div>
+            <div class="field"><label for="cloud_remoteApproval" data-i18n="cloud.remoteApprovalShort">Remote tool approval</label><input type="checkbox" id="cloud_remoteApproval" data-i18n-title="cloud.remoteApproval" title="Allow remote users to approve tools on this machine"></div>
+            <p class="hint" data-i18n="cloud.remoteApprovalHint">When off, runs started through Mux Cloud deny tools that edit files or run commands.</p>
+            <div class="row"><a class="btn secondary cloud-link" id="cloud_open" target="_blank" rel="noopener" data-i18n="cloud.open">Open Mux Cloud</a><button class="btn danger" id="cloudSignOutBtn" data-i18n="cloud.signOut">Sign out</button></div>
+          </div>
         </div>
         <div class="row"><button class="btn" id="saveSettingsBtn" title="Save these settings to settings.json. Run-affecting values apply next turn; REST changes need a restart." data-i18n="act.savesettings">Save settings</button><button class="btn secondary" id="reloadSettingsBtn" title="Reload settings from disk, discarding unsaved changes" data-i18n="act.reload">Reload</button></div>
       </div>
@@ -788,14 +854,19 @@ td.norows{padding:26px;text-align:center;color:var(--muted)}
 __SLASH_COMPLETION_JS__
 
 var API_KEY="__MUX_API_KEY__";
+var BASE="__MUX_BASE_PATH__";
+function wsUrl(){return (location.protocol==="https:"?"wss":"ws")+"://"+location.host+BASE+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");}
 var I18N={
 en:{
+"cloud.remoteApprovalShort":"Remote tool approval","cloud.remoteApprovalHint":"When off, runs started through Mux Cloud deny tools that edit files or run commands.",
+"cloud.state.unavailable":"Unavailable","cloud.state.not_signed_in":"Not signed in","cloud.state.off":"Off","cloud.state.connecting":"Connecting","cloud.state.connected":"Connected","cloud.state.reconnecting":"Reconnecting","cloud.state.signed_out":"Signed out","cloud.state.removed":"Removed","cloud.reason.not_signed_in":"This machine is not signed in to Mux Cloud.","cloud.reason.turned_off":"The Mux Cloud connection is turned off on this machine.","cloud.reason.agent_not_running":"The mux agent is not running. The connection starts when it runs.","cloud.reason.another_process":"Another mux process on this machine runs the Mux Cloud connection.","cloud.reason.clock_skew":"This machine's clock is off by more than 2 minutes. Fix the clock and mux will reconnect.","cloud.reason.credential_rejected":"Mux Cloud no longer accepts this machine's sign-in. Sign in again.","cloud.reason.removed":"This machine was removed from Mux Cloud. Sign in again to reconnect it.","cloud.reason.upgrade_required":"Mux Cloud needs a newer version of mux. Upgrade mux, then reconnect.","cloud.reason.unreachable":"Mux Cloud cannot be reached. mux keeps trying.","cloud.reason.connection_dropped":"The connection to Mux Cloud dropped. mux keeps trying.","cloud.reason.heartbeat_timeout":"The connection to Mux Cloud stopped responding. mux keeps trying.","cloud.reason.replaced":"Another connection for this machine replaced this one.","cloud.reason.server_restarting":"Mux Cloud is restarting. mux reconnects when it is back.","cloud.reason.rate_limited":"Too many failed attempts. mux waits before trying again.","cloud.reason.handshake_rejected":"Mux Cloud did not accept the connection. mux keeps trying.","cloud.reason.not_hosted_here":"Another mux process on this machine runs the Mux Cloud connection.","cloud.title":"Mux Cloud","cloud.desc":"Use this machine from a browser on another computer or from your phone. Conversations stay on this machine; Mux Cloud passes them through.","cloud.notice":"Anyone signed in to this Mux Cloud account can use this machine remotely, as if they were at it, including approving tools that edit files and run commands. To keep remote use read-only for those tools, turn off remote tool approval after signing in.","cloud.email":"Email","cloud.password":"Password","cloud.server":"Server","cloud.machineName":"Machine name","cloud.signIn":"Sign in","cloud.signingIn":"Signing in…","cloud.signOut":"Sign out","cloud.statusLbl":"Status","cloud.account":"Account","cloud.machine":"Machine","cloud.remoteApproval":"Allow remote users to approve tools on this machine","cloud.open":"Open Mux Cloud","cloud.failed":"Sign-in failed: ","cloud.required":"Enter your email and password.","cloud.noAccount":"No account yet?","cloud.createAccountAt":"Create one at {url}",
+"chat.folder":"Folder","chat.folder.ph":"Default folder","chat.folder.tip":"Pick a recent folder or type any folder path on this machine for a new conversation. An open conversation keeps the folder it started in.","chat.autoApprove":"Auto-approve tools","chat.autoApprove.tip":"Run tools that edit files or run commands without asking for approval. Saved in this browser.","chat.autoApprove.on":"Auto-approve is on: tools run without asking.","chat.autoApprove.offRemote":"Unavailable: this machine's owner does not allow tool approvals through Mux Cloud.","chat.autoApprove.offReadOnly":"Unavailable: this mux server denies tools that edit files or run commands.",
 "pal.title":"Color palette","pal.system":"System (follow OS)","pal.custom":"custom","pal.new":"New palette…","pal.edit":"Edit palette","pal.delete":"Delete palette","pal.deleteConfirm":"Delete the palette “{name}”?","pal.saved":"Palette saved","pal.hint":"Palettes and the active choice are shared with the terminal UI, the desktop app, and VS Code.","pal.id":"Id","pal.idTip":"Lowercase kebab-case, for example my-palette.","pal.name":"Name","pal.dark":"Dark palette","pal.base":"Base palette","pal.baseTip":"Supplies any color left blank.","pal.colors":"Colors (hex)","ep.import":"Import models…","ep.importTitle":"Import models from {name}","ep.importHint":"Each model you pick becomes its own endpoint with this endpoint's settings and credentials.","ep.importBtn":"Import","ep.importNone":"No new models found.","ep.importFailed":"The backend did not list its models.","ep.importAdded":"Added {n} endpoint(s).","ep.importQuerying":"Asking {name} for its models…",
 "us.endpoint":"Endpoint","us.model":"Model","us.label":"Label","us.tag":"Tag","us.endpoint.tip":"Filter to one endpoint","us.model.tip":"Filter to one model","us.label.tip":"Filter usage to sessions carrying this label","us.tag.tip":"Filter usage to sessions carrying this tag","us.allEndpoints":"All endpoints","us.allModels":"All models","us.allLabels":"All labels","us.allTags":"All tags","sess.labels":"Labels","sess.tags":"Tags","sess.editLabels":"Edit labels","sess.editTags":"Edit tags","sess.labelsPh":"Labels (comma-separated)","sess.tagsPh":"Tags (key: value, comma-separated)","sess.metaSaved":"Metadata updated",
 "nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"MCP Servers","nav.prompts":"Prompts","nav.subagents":"Subagents","nav.hooks":"Hooks","nav.commands":"Commands","nav.keybindings":"Keybindings","nav.skills":"Skills","nav.sessions":"Sessions","nav.settings":"Settings","grp.observability":"Observability","nav.usage":"Usage","nav.pricing":"Pricing",
 "grp.config":"Configuration","grp.system":"System",
 "vt.mcp":"MCP Servers","vt.hooks":"Event Hooks","vt.commands":"Custom Commands",
-"act.validate":"Validate","mcp.val.running":"Connecting…","mcp.val.connected":"Connected","mcp.val.failed":"Failed","mcp.val.tools":"Tools","mcp.val.copy":"Copy details","act.reload":"Reload","act.save":"Save","act.cancel":"Cancel","act.close":"Close","act.delete":"Delete","act.edit":"Edit","act.duplicate":"Duplicate","act.viewjson":"View JSON","act.copyjson":"Copy JSON","act.copyskill":"⧉ Copy SKILL.md","act.copy":"Copy","act.retry":"Retry","act.view":"View","act.enable":"Enable","act.disable":"Disable","act.confirm":"Confirm","act.savesettings":"Save settings","act.allsessions":"All sessions","act.reset":"Reset","col.kind":"Kind","col.value":"Value","tag.custom":"Custom","prompts.catalogHead":"Operational prompts",
+"act.validate":"Validate","mcp.val.running":"Connecting…","mcp.val.connected":"Connected","mcp.val.failed":"Failed","mcp.val.tools":"Tools","mcp.val.copy":"Copy details","act.reload":"Reload","act.save":"Save","act.cancel":"Cancel","act.close":"Close","act.delete":"Delete","act.edit":"Edit","act.duplicate":"Duplicate","act.viewjson":"View JSON","act.copyjson":"Copy JSON","act.copyskill":"⧉ Copy SKILL.md","act.showPassword":"Show password","act.hidePassword":"Hide password","act.showKey":"Show key","act.hideKey":"Hide key","act.copy":"Copy","act.retry":"Retry","act.view":"View","act.enable":"Enable","act.disable":"Disable","act.confirm":"Confirm","act.savesettings":"Save settings","act.allsessions":"All sessions","act.reset":"Reset","col.kind":"Kind","col.value":"Value","tag.custom":"Custom","prompts.catalogHead":"Operational prompts",
 "add.endpoint":"Add endpoint","add.server":"Add server","add.profile":"Add profile","add.subagent":"Add subagent","add.hook":"Add hook","add.command":"Add command","add.binding":"Add binding","add.skill":"Add skill","act.packs":"Skill packs","pack.none":"No skill packs are bundled with this build.","pack.install":"Install","pack.remove":"Remove","pack.installAll":"Install all","pack.removeAll":"Remove installed","pack.installed":"Installed","pack.removed":"Removed","pack.skipped":"skipped","act.newchat":"New chat",
 "tbl.rows":"Rows","tbl.columns":"Columns","tbl.filter":"Filter…","tbl.norows":"No rows match the current filters.","tbl.record":"record","tbl.records":"records","tbl.loading":"Loading…","tbl.failed":"Failed to load.","tbl.showing":"Showing {a}–{b} of {n}",
 "toast.saved":"Saved","toast.deleted":"Deleted","toast.created":"Created","toast.copied":"Copied to clipboard","toast.nameReq":"Name is required","toast.exported":"Exported",
@@ -813,11 +884,14 @@ en:{
 "lang.label":"Language"
 },
 es:{
+"cloud.remoteApprovalShort":"Aprobación remota de herramientas","cloud.remoteApprovalHint":"Si está desactivada, las ejecuciones iniciadas desde Mux Cloud rechazan las herramientas que editan archivos o ejecutan comandos.",
+"cloud.state.unavailable":"No disponible","cloud.state.not_signed_in":"Sin iniciar sesión","cloud.state.off":"Desactivado","cloud.state.connecting":"Conectando","cloud.state.connected":"Conectado","cloud.state.reconnecting":"Reconectando","cloud.state.signed_out":"Sesión cerrada","cloud.state.removed":"Eliminada","cloud.reason.not_signed_in":"Esta máquina no ha iniciado sesión en Mux Cloud.","cloud.reason.turned_off":"La conexión con Mux Cloud está desactivada en esta máquina.","cloud.reason.agent_not_running":"El agente de mux no se está ejecutando. La conexión se inicia cuando se ejecute.","cloud.reason.another_process":"Otro proceso de mux en esta máquina gestiona la conexión con Mux Cloud.","cloud.reason.clock_skew":"El reloj de esta máquina tiene un desfase de más de 2 minutos. Corrige la hora y mux volverá a conectarse.","cloud.reason.credential_rejected":"Mux Cloud ya no acepta el inicio de sesión de esta máquina. Vuelve a iniciar sesión.","cloud.reason.removed":"Esta máquina se eliminó de Mux Cloud. Vuelve a iniciar sesión para conectarla de nuevo.","cloud.reason.upgrade_required":"Mux Cloud necesita una versión más reciente de mux. Actualiza mux y vuelve a conectarte.","cloud.reason.unreachable":"No se puede contactar con Mux Cloud. mux sigue intentándolo.","cloud.reason.connection_dropped":"Se perdió la conexión con Mux Cloud. mux sigue intentándolo.","cloud.reason.heartbeat_timeout":"La conexión con Mux Cloud dejó de responder. mux sigue intentándolo.","cloud.reason.replaced":"Otra conexión de esta máquina reemplazó a esta.","cloud.reason.server_restarting":"Mux Cloud se está reiniciando. mux volverá a conectarse cuando esté disponible.","cloud.reason.rate_limited":"Demasiados intentos fallidos. mux espera antes de volver a intentarlo.","cloud.reason.handshake_rejected":"Mux Cloud no aceptó la conexión. mux sigue intentándolo.","cloud.reason.not_hosted_here":"Otro proceso de mux en esta máquina gestiona la conexión con Mux Cloud.","cloud.title":"Mux Cloud","cloud.desc":"Usa esta máquina desde un navegador en otro equipo o desde tu teléfono. Las conversaciones se quedan en esta máquina; Mux Cloud solo las transmite.","cloud.notice":"Cualquier persona que inicie sesión en esta cuenta de Mux Cloud puede usar esta máquina de forma remota, como si estuviera frente a ella, incluso aprobar herramientas que editan archivos y ejecutan comandos. Para que el uso remoto sea de solo lectura con esas herramientas, desactiva la aprobación remota de herramientas después de iniciar sesión.","cloud.email":"Correo electrónico","cloud.password":"Contraseña","cloud.server":"Servidor","cloud.machineName":"Nombre de la máquina","cloud.signIn":"Iniciar sesión","cloud.signingIn":"Iniciando sesión…","cloud.signOut":"Cerrar sesión","cloud.statusLbl":"Estado","cloud.account":"Cuenta","cloud.machine":"Máquina","cloud.remoteApproval":"Permitir que usuarios remotos aprueben herramientas en esta máquina","cloud.open":"Abrir Mux Cloud","cloud.failed":"Error al iniciar sesión: ","cloud.required":"Introduce tu correo electrónico y tu contraseña.","cloud.noAccount":"¿Aún no tienes cuenta?","cloud.createAccountAt":"Crea una en {url}",
+"chat.folder":"Carpeta","chat.folder.ph":"Carpeta predeterminada","chat.folder.tip":"Elige una carpeta reciente o escribe cualquier ruta de carpeta de esta máquina para una conversación nueva. Una conversación abierta conserva la carpeta en la que empezó.","chat.autoApprove":"Aprobar auto.","chat.autoApprove.tip":"Ejecuta sin pedir aprobación las herramientas que editan archivos o ejecutan comandos. Se guarda en este navegador.","chat.autoApprove.on":"La aprobación automática está activada: las herramientas se ejecutan sin preguntar.","chat.autoApprove.offRemote":"No disponible: el propietario de esta máquina no permite aprobar herramientas a través de Mux Cloud.","chat.autoApprove.offReadOnly":"No disponible: este servidor de mux rechaza las herramientas que editan archivos o ejecutan comandos.",
 "pal.title":"Paleta de colores","pal.system":"Sistema (seguir el SO)","pal.custom":"personalizada","pal.new":"Nueva paleta…","pal.edit":"Editar paleta","pal.delete":"Eliminar paleta","pal.deleteConfirm":"¿Eliminar la paleta “{name}”?","pal.saved":"Paleta guardada","pal.hint":"Las paletas y la elección activa se comparten con la interfaz de terminal, la app de escritorio y VS Code.","pal.id":"Id","pal.idTip":"Minúsculas en kebab-case, por ejemplo my-palette.","pal.name":"Nombre","pal.dark":"Paleta oscura","pal.base":"Paleta base","pal.baseTip":"Aporta los colores que se dejen en blanco.","pal.colors":"Colores (hex)","ep.import":"Importar modelos…","ep.importTitle":"Importar modelos de {name}","ep.importHint":"Cada modelo elegido se convierte en su propio endpoint con la configuración y credenciales de este.","ep.importBtn":"Importar","ep.importNone":"No se encontraron modelos nuevos.","ep.importFailed":"El backend no listó sus modelos.","ep.importAdded":"Se añadieron {n} endpoint(s).","ep.importQuerying":"Consultando los modelos de {name}…",
 "nav.home":"Inicio","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Servidores MCP","nav.prompts":"Prompts","nav.subagents":"Subagentes","nav.hooks":"Hooks","nav.commands":"Comandos","nav.keybindings":"Atajos de teclado","nav.skills":"Habilidades","nav.sessions":"Sesiones","nav.settings":"Ajustes",
 "grp.config":"Configuración","grp.system":"Sistema",
 "vt.mcp":"Servidores MCP","vt.hooks":"Hooks de eventos","vt.commands":"Comandos personalizados",
-"act.validate":"Validar","mcp.val.running":"Conectando…","mcp.val.connected":"Conectado","mcp.val.failed":"Error","mcp.val.tools":"Herramientas","mcp.val.copy":"Copiar detalles","act.reload":"Recargar","act.save":"Guardar","act.cancel":"Cancelar","act.close":"Cerrar","act.delete":"Eliminar","act.edit":"Editar","act.duplicate":"Duplicar","act.viewjson":"Ver JSON","act.copyjson":"Copiar JSON","act.copyskill":"⧉ Copiar SKILL.md","act.copy":"Copiar","act.retry":"Reintentar","act.view":"Ver","act.enable":"Activar","act.disable":"Desactivar","act.confirm":"Confirmar","act.savesettings":"Guardar ajustes","act.allsessions":"Todas las sesiones",
+"act.validate":"Validar","mcp.val.running":"Conectando…","mcp.val.connected":"Conectado","mcp.val.failed":"Error","mcp.val.tools":"Herramientas","mcp.val.copy":"Copiar detalles","act.reload":"Recargar","act.save":"Guardar","act.cancel":"Cancelar","act.close":"Cerrar","act.delete":"Eliminar","act.edit":"Editar","act.duplicate":"Duplicar","act.viewjson":"Ver JSON","act.copyjson":"Copiar JSON","act.copyskill":"⧉ Copiar SKILL.md","act.showPassword":"Mostrar contraseña","act.hidePassword":"Ocultar contraseña","act.showKey":"Mostrar clave","act.hideKey":"Ocultar clave","act.copy":"Copiar","act.retry":"Reintentar","act.view":"Ver","act.enable":"Activar","act.disable":"Desactivar","act.confirm":"Confirmar","act.savesettings":"Guardar ajustes","act.allsessions":"Todas las sesiones",
 "add.endpoint":"Añadir endpoint","add.server":"Añadir servidor","add.profile":"Añadir perfil","add.subagent":"Añadir subagente","add.hook":"Añadir hook","add.command":"Añadir comando","add.binding":"Añadir atajo","add.skill":"Añadir habilidad","act.packs":"Paquetes de habilidades","pack.none":"Esta versión no incluye paquetes de habilidades.","pack.install":"Instalar","pack.remove":"Quitar","pack.installAll":"Instalar todo","pack.removeAll":"Quitar instalados","pack.installed":"Instalados","pack.removed":"Quitados","pack.skipped":"omitidos","act.newchat":"Nuevo chat",
 "tbl.rows":"Filas","tbl.columns":"Columnas","tbl.filter":"Filtrar…","tbl.norows":"Ninguna fila coincide con los filtros.","tbl.record":"registro","tbl.records":"registros","tbl.loading":"Cargando…","tbl.failed":"Error al cargar.","tbl.showing":"Mostrando {a}–{b} de {n}",
 "toast.saved":"Guardado","toast.deleted":"Eliminado","toast.created":"Creado","toast.copied":"Copiado al portapapeles","toast.nameReq":"El nombre es obligatorio","toast.exported":"Exportado",
@@ -835,11 +909,14 @@ es:{
 "lang.label":"Idioma"
 },
 pt:{
+"cloud.remoteApprovalShort":"Aprovação remota de ferramentas","cloud.remoteApprovalHint":"Quando desativada, as execuções iniciadas pelo Mux Cloud recusam ferramentas que editam arquivos ou executam comandos.",
+"cloud.state.unavailable":"Indisponível","cloud.state.not_signed_in":"Sem sessão iniciada","cloud.state.off":"Desativado","cloud.state.connecting":"Conectando","cloud.state.connected":"Conectado","cloud.state.reconnecting":"Reconectando","cloud.state.signed_out":"Sessão encerrada","cloud.state.removed":"Removida","cloud.reason.not_signed_in":"Esta máquina não está conectada a uma conta do Mux Cloud.","cloud.reason.turned_off":"A conexão com o Mux Cloud está desativada nesta máquina.","cloud.reason.agent_not_running":"O agente mux não está em execução. A conexão começa quando ele for executado.","cloud.reason.another_process":"Outro processo do mux nesta máquina mantém a conexão com o Mux Cloud.","cloud.reason.clock_skew":"O relógio desta máquina está mais de 2 minutos fora do horário. Corrija o relógio e o mux se reconectará.","cloud.reason.credential_rejected":"O Mux Cloud não aceita mais o login desta máquina. Entre novamente.","cloud.reason.removed":"Esta máquina foi removida do Mux Cloud. Entre novamente para reconectá-la.","cloud.reason.upgrade_required":"O Mux Cloud precisa de uma versão mais recente do mux. Atualize o mux e reconecte.","cloud.reason.unreachable":"Não é possível acessar o Mux Cloud. O mux continua tentando.","cloud.reason.connection_dropped":"A conexão com o Mux Cloud caiu. O mux continua tentando.","cloud.reason.heartbeat_timeout":"A conexão com o Mux Cloud parou de responder. O mux continua tentando.","cloud.reason.replaced":"Outra conexão desta máquina substituiu esta.","cloud.reason.server_restarting":"O Mux Cloud está reiniciando. O mux se reconecta quando ele voltar.","cloud.reason.rate_limited":"Muitas tentativas com falha. O mux aguarda antes de tentar novamente.","cloud.reason.handshake_rejected":"O Mux Cloud não aceitou a conexão. O mux continua tentando.","cloud.reason.not_hosted_here":"Outro processo do mux nesta máquina mantém a conexão com o Mux Cloud.","cloud.title":"Mux Cloud","cloud.desc":"Use esta máquina de um navegador em outro computador ou do seu celular. As conversas ficam nesta máquina; o Mux Cloud apenas as repassa.","cloud.notice":"Qualquer pessoa conectada a esta conta do Mux Cloud pode usar esta máquina remotamente, como se estivesse diante dela, inclusive aprovar ferramentas que editam arquivos e executam comandos. Para manter o uso remoto somente leitura nessas ferramentas, desative a aprovação remota de ferramentas depois de entrar.","cloud.email":"E-mail","cloud.password":"Senha","cloud.server":"Servidor","cloud.machineName":"Nome da máquina","cloud.signIn":"Entrar","cloud.signingIn":"Entrando…","cloud.signOut":"Sair","cloud.statusLbl":"Status","cloud.account":"Conta","cloud.machine":"Máquina","cloud.remoteApproval":"Permitir que usuários remotos aprovem ferramentas nesta máquina","cloud.open":"Abrir o Mux Cloud","cloud.failed":"Falha ao entrar: ","cloud.required":"Digite seu e-mail e sua senha.","cloud.noAccount":"Ainda não tem conta?","cloud.createAccountAt":"Crie uma em {url}",
+"chat.folder":"Pasta","chat.folder.ph":"Pasta padrão","chat.folder.tip":"Escolha uma pasta recente ou digite qualquer caminho de pasta desta máquina para uma nova conversa. Uma conversa aberta mantém a pasta em que começou.","chat.autoApprove":"Aprovar auto.","chat.autoApprove.tip":"Executa sem pedir aprovação as ferramentas que editam arquivos ou executam comandos. Fica salvo neste navegador.","chat.autoApprove.on":"A aprovação automática está ativada: as ferramentas são executadas sem perguntar.","chat.autoApprove.offRemote":"Indisponível: o dono desta máquina não permite aprovar ferramentas pelo Mux Cloud.","chat.autoApprove.offReadOnly":"Indisponível: este servidor do mux recusa ferramentas que editam arquivos ou executam comandos.",
 "pal.title":"Paleta de cores","pal.system":"Sistema (seguir o SO)","pal.custom":"personalizada","pal.new":"Nova paleta…","pal.edit":"Editar paleta","pal.delete":"Excluir paleta","pal.deleteConfirm":"Excluir a paleta “{name}”?","pal.saved":"Paleta salva","pal.hint":"As paletas e a escolha ativa são compartilhadas com a interface de terminal, o app desktop e o VS Code.","pal.id":"Id","pal.idTip":"Minúsculas em kebab-case, por exemplo my-palette.","pal.name":"Nome","pal.dark":"Paleta escura","pal.base":"Paleta base","pal.baseTip":"Fornece as cores deixadas em branco.","pal.colors":"Cores (hex)","ep.import":"Importar modelos…","ep.importTitle":"Importar modelos de {name}","ep.importHint":"Cada modelo escolhido vira um endpoint próprio com as configurações e credenciais deste.","ep.importBtn":"Importar","ep.importNone":"Nenhum modelo novo encontrado.","ep.importFailed":"O backend não listou seus modelos.","ep.importAdded":"{n} endpoint(s) adicionado(s).","ep.importQuerying":"Consultando os modelos de {name}…",
 "nav.home":"Início","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Servidores MCP","nav.prompts":"Prompts","nav.subagents":"Subagentes","nav.hooks":"Hooks","nav.commands":"Comandos","nav.keybindings":"Atalhos de teclado","nav.skills":"Habilidades","nav.sessions":"Sessões","nav.settings":"Configurações",
 "grp.config":"Configuração","grp.system":"Sistema",
 "vt.mcp":"Servidores MCP","vt.hooks":"Hooks de eventos","vt.commands":"Comandos personalizados",
-"act.validate":"Validar","mcp.val.running":"Conectando…","mcp.val.connected":"Conectado","mcp.val.failed":"Falhou","mcp.val.tools":"Ferramentas","mcp.val.copy":"Copiar detalhes","act.reload":"Recarregar","act.save":"Salvar","act.cancel":"Cancelar","act.close":"Fechar","act.delete":"Excluir","act.edit":"Editar","act.duplicate":"Duplicar","act.viewjson":"Ver JSON","act.copyjson":"Copiar JSON","act.copyskill":"⧉ Copiar SKILL.md","act.copy":"Copiar","act.retry":"Tentar novamente","act.view":"Ver","act.enable":"Ativar","act.disable":"Desativar","act.confirm":"Confirmar","act.savesettings":"Salvar configurações","act.allsessions":"Todas as sessões",
+"act.validate":"Validar","mcp.val.running":"Conectando…","mcp.val.connected":"Conectado","mcp.val.failed":"Falhou","mcp.val.tools":"Ferramentas","mcp.val.copy":"Copiar detalhes","act.reload":"Recarregar","act.save":"Salvar","act.cancel":"Cancelar","act.close":"Fechar","act.delete":"Excluir","act.edit":"Editar","act.duplicate":"Duplicar","act.viewjson":"Ver JSON","act.copyjson":"Copiar JSON","act.copyskill":"⧉ Copiar SKILL.md","act.showPassword":"Mostrar senha","act.hidePassword":"Ocultar senha","act.showKey":"Mostrar chave","act.hideKey":"Ocultar chave","act.copy":"Copiar","act.retry":"Tentar novamente","act.view":"Ver","act.enable":"Ativar","act.disable":"Desativar","act.confirm":"Confirmar","act.savesettings":"Salvar configurações","act.allsessions":"Todas as sessões",
 "add.endpoint":"Adicionar endpoint","add.server":"Adicionar servidor","add.profile":"Adicionar perfil","add.subagent":"Adicionar subagente","add.hook":"Adicionar hook","add.command":"Adicionar comando","add.binding":"Adicionar atalho","add.skill":"Adicionar habilidade","act.packs":"Pacotes de habilidades","pack.none":"Esta versão não inclui pacotes de habilidades.","pack.install":"Instalar","pack.remove":"Remover","pack.installAll":"Instalar tudo","pack.removeAll":"Remover instalados","pack.installed":"Instalados","pack.removed":"Removidos","pack.skipped":"ignorados","act.newchat":"Novo chat",
 "tbl.rows":"Linhas","tbl.columns":"Colunas","tbl.filter":"Filtrar…","tbl.norows":"Nenhuma linha corresponde aos filtros.","tbl.record":"registro","tbl.records":"registros","tbl.loading":"Carregando…","tbl.failed":"Falha ao carregar.","tbl.showing":"Mostrando {a}–{b} de {n}",
 "toast.saved":"Salvo","toast.deleted":"Excluído","toast.created":"Criado","toast.copied":"Copiado para a área de transferência","toast.nameReq":"O nome é obrigatório","toast.exported":"Exportado",
@@ -857,11 +934,14 @@ pt:{
 "lang.label":"Idioma"
 },
 fr:{
+"cloud.remoteApprovalShort":"Approbation à distance des outils","cloud.remoteApprovalHint":"Désactivée, les exécutions lancées depuis Mux Cloud refusent les outils qui modifient des fichiers ou exécutent des commandes.",
+"cloud.state.unavailable":"Indisponible","cloud.state.not_signed_in":"Non connecté au compte","cloud.state.off":"Désactivé","cloud.state.connecting":"Connexion en cours","cloud.state.connected":"Connecté","cloud.state.reconnecting":"Reconnexion en cours","cloud.state.signed_out":"Session fermée","cloud.state.removed":"Supprimée","cloud.reason.not_signed_in":"Cette machine n'est pas connectée à un compte Mux Cloud.","cloud.reason.turned_off":"La connexion à Mux Cloud est désactivée sur cette machine.","cloud.reason.agent_not_running":"L'agent mux n'est pas en cours d'exécution. La connexion démarre dès qu'il s'exécute.","cloud.reason.another_process":"Un autre processus mux sur cette machine gère la connexion à Mux Cloud.","cloud.reason.clock_skew":"L'horloge de cette machine est décalée de plus de 2 minutes. Corrigez l'heure et mux se reconnectera.","cloud.reason.credential_rejected":"Mux Cloud n'accepte plus la connexion de cette machine. Reconnectez-vous.","cloud.reason.removed":"Cette machine a été supprimée de Mux Cloud. Reconnectez-vous pour la rattacher.","cloud.reason.upgrade_required":"Mux Cloud nécessite une version plus récente de mux. Mettez mux à jour, puis reconnectez-vous.","cloud.reason.unreachable":"Mux Cloud est injoignable. mux continue d'essayer.","cloud.reason.connection_dropped":"La connexion à Mux Cloud a été interrompue. mux continue d'essayer.","cloud.reason.heartbeat_timeout":"La connexion à Mux Cloud ne répond plus. mux continue d'essayer.","cloud.reason.replaced":"Une autre connexion de cette machine a remplacé celle-ci.","cloud.reason.server_restarting":"Mux Cloud redémarre. mux se reconnectera dès son retour.","cloud.reason.rate_limited":"Trop de tentatives échouées. mux patiente avant de réessayer.","cloud.reason.handshake_rejected":"Mux Cloud n'a pas accepté la connexion. mux continue d'essayer.","cloud.reason.not_hosted_here":"Un autre processus mux sur cette machine gère la connexion à Mux Cloud.","cloud.title":"Mux Cloud","cloud.desc":"Utilisez cette machine depuis un navigateur sur un autre ordinateur ou depuis votre téléphone. Les conversations restent sur cette machine ; Mux Cloud se contente de les relayer.","cloud.notice":"Toute personne connectée à ce compte Mux Cloud peut utiliser cette machine à distance, comme si elle était devant, y compris approuver des outils qui modifient des fichiers et exécutent des commandes. Pour que l'usage à distance reste en lecture seule pour ces outils, désactivez l'approbation à distance des outils une fois connecté.","cloud.email":"E-mail","cloud.password":"Mot de passe","cloud.server":"Serveur","cloud.machineName":"Nom de la machine","cloud.signIn":"Se connecter","cloud.signingIn":"Connexion…","cloud.signOut":"Se déconnecter","cloud.statusLbl":"État","cloud.account":"Compte","cloud.machine":"Machine","cloud.remoteApproval":"Autoriser les utilisateurs distants à approuver des outils sur cette machine","cloud.open":"Ouvrir Mux Cloud","cloud.failed":"Échec de la connexion : ","cloud.required":"Saisissez votre e-mail et votre mot de passe.","cloud.noAccount":"Pas encore de compte ?","cloud.createAccountAt":"Créez-en un sur {url}",
+"chat.folder":"Dossier","chat.folder.ph":"Dossier par défaut","chat.folder.tip":"Choisissez un dossier récent ou saisissez le chemin de n'importe quel dossier de cette machine pour une nouvelle conversation. Une conversation ouverte garde le dossier où elle a commencé.","chat.autoApprove":"Approuver auto.","chat.autoApprove.tip":"Exécute sans demander d'approbation les outils qui modifient des fichiers ou exécutent des commandes. Enregistré dans ce navigateur.","chat.autoApprove.on":"L'approbation automatique est activée : les outils s'exécutent sans demander.","chat.autoApprove.offRemote":"Indisponible : le propriétaire de cette machine n'autorise pas l'approbation des outils via Mux Cloud.","chat.autoApprove.offReadOnly":"Indisponible : ce serveur mux refuse les outils qui modifient des fichiers ou exécutent des commandes.",
 "pal.title":"Palette de couleurs","pal.system":"Système (suivre l'OS)","pal.custom":"personnalisée","pal.new":"Nouvelle palette…","pal.edit":"Modifier la palette","pal.delete":"Supprimer la palette","pal.deleteConfirm":"Supprimer la palette “{name}” ?","pal.saved":"Palette enregistrée","pal.hint":"Les palettes et le choix actif sont partagés avec l'interface terminal, l'application de bureau et VS Code.","pal.id":"Id","pal.idTip":"Minuscules en kebab-case, par exemple my-palette.","pal.name":"Nom","pal.dark":"Palette sombre","pal.base":"Palette de base","pal.baseTip":"Fournit les couleurs laissées vides.","pal.colors":"Couleurs (hex)","ep.import":"Importer des modèles…","ep.importTitle":"Importer des modèles depuis {name}","ep.importHint":"Chaque modèle choisi devient un point de terminaison avec les paramètres et identifiants de celui-ci.","ep.importBtn":"Importer","ep.importNone":"Aucun nouveau modèle trouvé.","ep.importFailed":"Le backend n'a pas listé ses modèles.","ep.importAdded":"{n} point(s) de terminaison ajouté(s).","ep.importQuerying":"Interrogation des modèles de {name}…",
 "nav.home":"Accueil","nav.chat":"Chat","nav.endpoints":"Endpoints","nav.mcp":"Serveurs MCP","nav.prompts":"Prompts","nav.subagents":"Sous-agents","nav.hooks":"Hooks","nav.commands":"Commandes","nav.keybindings":"Raccourcis clavier","nav.skills":"Compétences","nav.sessions":"Sessions","nav.settings":"Paramètres",
 "grp.config":"Configuration","grp.system":"Système",
 "vt.mcp":"Serveurs MCP","vt.hooks":"Hooks d’événements","vt.commands":"Commandes personnalisées",
-"act.validate":"Valider","mcp.val.running":"Connexion…","mcp.val.connected":"Connecté","mcp.val.failed":"Échec","mcp.val.tools":"Outils","mcp.val.copy":"Copier les détails","act.reload":"Recharger","act.save":"Enregistrer","act.cancel":"Annuler","act.close":"Fermer","act.delete":"Supprimer","act.edit":"Modifier","act.duplicate":"Dupliquer","act.viewjson":"Voir le JSON","act.copyjson":"Copier le JSON","act.copyskill":"⧉ Copier SKILL.md","act.copy":"Copier","act.retry":"Réessayer","act.view":"Voir","act.enable":"Activer","act.disable":"Désactiver","act.confirm":"Confirmer","act.savesettings":"Enregistrer les paramètres","act.allsessions":"Toutes les sessions",
+"act.validate":"Valider","mcp.val.running":"Connexion…","mcp.val.connected":"Connecté","mcp.val.failed":"Échec","mcp.val.tools":"Outils","mcp.val.copy":"Copier les détails","act.reload":"Recharger","act.save":"Enregistrer","act.cancel":"Annuler","act.close":"Fermer","act.delete":"Supprimer","act.edit":"Modifier","act.duplicate":"Dupliquer","act.viewjson":"Voir le JSON","act.copyjson":"Copier le JSON","act.copyskill":"⧉ Copier SKILL.md","act.showPassword":"Afficher le mot de passe","act.hidePassword":"Masquer le mot de passe","act.showKey":"Afficher la clé","act.hideKey":"Masquer la clé","act.copy":"Copier","act.retry":"Réessayer","act.view":"Voir","act.enable":"Activer","act.disable":"Désactiver","act.confirm":"Confirmer","act.savesettings":"Enregistrer les paramètres","act.allsessions":"Toutes les sessions",
 "add.endpoint":"Ajouter un endpoint","add.server":"Ajouter un serveur","add.profile":"Ajouter un profil","add.subagent":"Ajouter un sous-agent","add.hook":"Ajouter un hook","add.command":"Ajouter une commande","add.binding":"Ajouter un raccourci","add.skill":"Ajouter une compétence","act.packs":"Packs de compétences","pack.none":"Aucun pack de compétences n’est inclus dans cette version.","pack.install":"Installer","pack.remove":"Retirer","pack.installAll":"Tout installer","pack.removeAll":"Retirer les installées","pack.installed":"Installées","pack.removed":"Retirées","pack.skipped":"ignorées","act.newchat":"Nouveau chat",
 "tbl.rows":"Lignes","tbl.columns":"Colonnes","tbl.filter":"Filtrer…","tbl.norows":"Aucune ligne ne correspond aux filtres.","tbl.record":"enregistrement","tbl.records":"enregistrements","tbl.loading":"Chargement…","tbl.failed":"Échec du chargement.","tbl.showing":"Affichage de {a} à {b} sur {n}",
 "toast.saved":"Enregistré","toast.deleted":"Supprimé","toast.created":"Créé","toast.copied":"Copié dans le presse-papiers","toast.nameReq":"Le nom est obligatoire","toast.exported":"Exporté",
@@ -879,11 +959,14 @@ fr:{
 "lang.label":"Langue"
 },
 it:{
+"cloud.remoteApprovalShort":"Approvazione remota degli strumenti","cloud.remoteApprovalHint":"Se disattivata, le esecuzioni avviate da Mux Cloud rifiutano gli strumenti che modificano file o eseguono comandi.",
+"cloud.state.unavailable":"Non disponibile","cloud.state.not_signed_in":"Accesso non effettuato","cloud.state.off":"Disattivato","cloud.state.connecting":"Connessione in corso","cloud.state.connected":"Connesso","cloud.state.reconnecting":"Riconnessione in corso","cloud.state.signed_out":"Disconnesso","cloud.state.removed":"Rimossa","cloud.reason.not_signed_in":"Questa macchina non ha effettuato l'accesso a Mux Cloud.","cloud.reason.turned_off":"La connessione a Mux Cloud è disattivata su questa macchina.","cloud.reason.agent_not_running":"L'agente mux non è in esecuzione. La connessione si avvia quando viene eseguito.","cloud.reason.another_process":"Un altro processo mux su questa macchina gestisce la connessione a Mux Cloud.","cloud.reason.clock_skew":"L'orologio di questa macchina è sfasato di oltre 2 minuti. Correggi l'ora e mux si riconnetterà.","cloud.reason.credential_rejected":"Mux Cloud non accetta più l'accesso di questa macchina. Accedi di nuovo.","cloud.reason.removed":"Questa macchina è stata rimossa da Mux Cloud. Accedi di nuovo per ricollegarla.","cloud.reason.upgrade_required":"Mux Cloud richiede una versione più recente di mux. Aggiorna mux, poi riconnettiti.","cloud.reason.unreachable":"Mux Cloud non è raggiungibile. mux continua a riprovare.","cloud.reason.connection_dropped":"La connessione a Mux Cloud si è interrotta. mux continua a riprovare.","cloud.reason.heartbeat_timeout":"La connessione a Mux Cloud ha smesso di rispondere. mux continua a riprovare.","cloud.reason.replaced":"Un'altra connessione di questa macchina ha sostituito questa.","cloud.reason.server_restarting":"Mux Cloud si sta riavviando. mux si riconnetterà quando tornerà disponibile.","cloud.reason.rate_limited":"Troppi tentativi non riusciti. mux attende prima di riprovare.","cloud.reason.handshake_rejected":"Mux Cloud non ha accettato la connessione. mux continua a riprovare.","cloud.reason.not_hosted_here":"Un altro processo mux su questa macchina gestisce la connessione a Mux Cloud.","cloud.title":"Mux Cloud","cloud.desc":"Usa questa macchina da un browser su un altro computer o dal telefono. Le conversazioni restano su questa macchina; Mux Cloud le inoltra soltanto.","cloud.notice":"Chiunque abbia effettuato l'accesso a questo account Mux Cloud può usare questa macchina da remoto, come se fosse davanti, inclusa l'approvazione di strumenti che modificano file ed eseguono comandi. Per mantenere l'uso remoto in sola lettura per questi strumenti, disattiva l'approvazione remota degli strumenti dopo l'accesso.","cloud.email":"Email","cloud.password":"Password","cloud.server":"Server","cloud.machineName":"Nome della macchina","cloud.signIn":"Accedi","cloud.signingIn":"Accesso in corso…","cloud.signOut":"Esci","cloud.statusLbl":"Stato","cloud.account":"Account","cloud.machine":"Macchina","cloud.remoteApproval":"Consenti agli utenti remoti di approvare strumenti su questa macchina","cloud.open":"Apri Mux Cloud","cloud.failed":"Accesso non riuscito: ","cloud.required":"Inserisci email e password.","cloud.noAccount":"Non hai ancora un account?","cloud.createAccountAt":"Creane uno su {url}",
+"chat.folder":"Cartella","chat.folder.ph":"Cartella predefinita","chat.folder.tip":"Scegli una cartella recente o digita il percorso di qualsiasi cartella di questa macchina per una nuova conversazione. Una conversazione aperta mantiene la cartella in cui è iniziata.","chat.autoApprove":"Approva auto.","chat.autoApprove.tip":"Esegue senza chiedere approvazione gli strumenti che modificano file o eseguono comandi. Salvato in questo browser.","chat.autoApprove.on":"L'approvazione automatica è attiva: gli strumenti vengono eseguiti senza chiedere.","chat.autoApprove.offRemote":"Non disponibile: il proprietario di questa macchina non consente di approvare strumenti tramite Mux Cloud.","chat.autoApprove.offReadOnly":"Non disponibile: questo server mux rifiuta gli strumenti che modificano file o eseguono comandi.",
 "pal.title":"Tavolozza di colori","pal.system":"Sistema (segui il SO)","pal.custom":"personalizzata","pal.new":"Nuova tavolozza…","pal.edit":"Modifica tavolozza","pal.delete":"Elimina tavolozza","pal.deleteConfirm":"Eliminare la tavolozza “{name}”?","pal.saved":"Tavolozza salvata","pal.hint":"Le tavolozze e la scelta attiva sono condivise con l'interfaccia da terminale, l'app desktop e VS Code.","pal.id":"Id","pal.idTip":"Minuscole in kebab-case, ad esempio my-palette.","pal.name":"Nome","pal.dark":"Tavolozza scura","pal.base":"Tavolozza di base","pal.baseTip":"Fornisce i colori lasciati vuoti.","pal.colors":"Colori (hex)","ep.import":"Importa modelli…","ep.importTitle":"Importa modelli da {name}","ep.importHint":"Ogni modello scelto diventa un endpoint con le impostazioni e le credenziali di questo.","ep.importBtn":"Importa","ep.importNone":"Nessun nuovo modello trovato.","ep.importFailed":"Il backend non ha elencato i suoi modelli.","ep.importAdded":"Aggiunti {n} endpoint.","ep.importQuerying":"Richiesta dei modelli a {name}…",
 "nav.home":"Home","nav.chat":"Chat","nav.endpoints":"Endpoint","nav.mcp":"Server MCP","nav.prompts":"Prompt","nav.subagents":"Subagent","nav.hooks":"Hook","nav.commands":"Comandi","nav.keybindings":"Scorciatoie da tastiera","nav.skills":"Competenze","nav.sessions":"Sessioni","nav.settings":"Impostazioni",
 "grp.config":"Configurazione","grp.system":"Sistema",
 "vt.mcp":"Server MCP","vt.hooks":"Hook di eventi","vt.commands":"Comandi personalizzati",
-"act.validate":"Convalida","mcp.val.running":"Connessione…","mcp.val.connected":"Connesso","mcp.val.failed":"Non riuscito","mcp.val.tools":"Strumenti","mcp.val.copy":"Copia dettagli","act.reload":"Ricarica","act.save":"Salva","act.cancel":"Annulla","act.close":"Chiudi","act.delete":"Elimina","act.edit":"Modifica","act.duplicate":"Duplica","act.viewjson":"Vedi JSON","act.copyjson":"Copia JSON","act.copyskill":"⧉ Copia SKILL.md","act.copy":"Copia","act.retry":"Riprova","act.view":"Vedi","act.enable":"Abilita","act.disable":"Disabilita","act.confirm":"Conferma","act.savesettings":"Salva impostazioni","act.allsessions":"Tutte le sessioni",
+"act.validate":"Convalida","mcp.val.running":"Connessione…","mcp.val.connected":"Connesso","mcp.val.failed":"Non riuscito","mcp.val.tools":"Strumenti","mcp.val.copy":"Copia dettagli","act.reload":"Ricarica","act.save":"Salva","act.cancel":"Annulla","act.close":"Chiudi","act.delete":"Elimina","act.edit":"Modifica","act.duplicate":"Duplica","act.viewjson":"Vedi JSON","act.copyjson":"Copia JSON","act.copyskill":"⧉ Copia SKILL.md","act.showPassword":"Mostra password","act.hidePassword":"Nascondi password","act.showKey":"Mostra chiave","act.hideKey":"Nascondi chiave","act.copy":"Copia","act.retry":"Riprova","act.view":"Vedi","act.enable":"Abilita","act.disable":"Disabilita","act.confirm":"Conferma","act.savesettings":"Salva impostazioni","act.allsessions":"Tutte le sessioni",
 "add.endpoint":"Aggiungi endpoint","add.server":"Aggiungi server","add.profile":"Aggiungi profilo","add.subagent":"Aggiungi subagent","add.hook":"Aggiungi hook","add.command":"Aggiungi comando","add.binding":"Aggiungi scorciatoia","add.skill":"Aggiungi competenza","act.packs":"Pacchetti di competenze","pack.none":"Questa versione non include pacchetti di competenze.","pack.install":"Installa","pack.remove":"Rimuovi","pack.installAll":"Installa tutto","pack.removeAll":"Rimuovi installate","pack.installed":"Installate","pack.removed":"Rimosse","pack.skipped":"saltate","act.newchat":"Nuova chat",
 "tbl.rows":"Righe","tbl.columns":"Colonne","tbl.filter":"Filtra…","tbl.norows":"Nessuna riga corrisponde ai filtri.","tbl.record":"record","tbl.records":"record","tbl.loading":"Caricamento…","tbl.failed":"Caricamento non riuscito.","tbl.showing":"Visualizzati {a}–{b} di {n}",
 "toast.saved":"Salvato","toast.deleted":"Eliminato","toast.created":"Creato","toast.copied":"Copiato negli appunti","toast.nameReq":"Il nome è obbligatorio","toast.exported":"Esportato",
@@ -901,11 +984,14 @@ it:{
 "lang.label":"Lingua"
 },
 de:{
+"cloud.remoteApprovalShort":"Fernfreigabe von Werkzeugen","cloud.remoteApprovalHint":"Wenn aus, lehnen über Mux Cloud gestartete Läufe Werkzeuge ab, die Dateien bearbeiten oder Befehle ausführen.",
+"cloud.state.unavailable":"Nicht verfügbar","cloud.state.not_signed_in":"Nicht angemeldet","cloud.state.off":"Aus","cloud.state.connecting":"Verbindung wird hergestellt","cloud.state.connected":"Verbunden","cloud.state.reconnecting":"Verbindung wird wiederhergestellt","cloud.state.signed_out":"Abgemeldet","cloud.state.removed":"Entfernt","cloud.reason.not_signed_in":"Dieser Rechner ist nicht bei Mux Cloud angemeldet.","cloud.reason.turned_off":"Die Mux-Cloud-Verbindung ist auf diesem Rechner ausgeschaltet.","cloud.reason.agent_not_running":"Der mux-Agent läuft nicht. Die Verbindung startet, sobald er läuft.","cloud.reason.another_process":"Ein anderer mux-Prozess auf diesem Rechner hält die Mux-Cloud-Verbindung.","cloud.reason.clock_skew":"Die Uhr dieses Rechners weicht um mehr als 2 Minuten ab. Stellen Sie die Uhr richtig, dann verbindet sich mux erneut.","cloud.reason.credential_rejected":"Mux Cloud akzeptiert die Anmeldung dieses Rechners nicht mehr. Melden Sie sich erneut an.","cloud.reason.removed":"Dieser Rechner wurde aus Mux Cloud entfernt. Melden Sie sich erneut an, um ihn wieder zu verbinden.","cloud.reason.upgrade_required":"Mux Cloud benötigt eine neuere mux-Version. Aktualisieren Sie mux und verbinden Sie sich dann erneut.","cloud.reason.unreachable":"Mux Cloud ist nicht erreichbar. mux versucht es weiter.","cloud.reason.connection_dropped":"Die Verbindung zu Mux Cloud wurde unterbrochen. mux versucht es weiter.","cloud.reason.heartbeat_timeout":"Die Verbindung zu Mux Cloud reagiert nicht mehr. mux versucht es weiter.","cloud.reason.replaced":"Eine andere Verbindung dieses Rechners hat diese ersetzt.","cloud.reason.server_restarting":"Mux Cloud wird neu gestartet. mux verbindet sich erneut, sobald es wieder da ist.","cloud.reason.rate_limited":"Zu viele fehlgeschlagene Versuche. mux wartet, bevor es es erneut versucht.","cloud.reason.handshake_rejected":"Mux Cloud hat die Verbindung nicht angenommen. mux versucht es weiter.","cloud.reason.not_hosted_here":"Ein anderer mux-Prozess auf diesem Rechner hält die Mux-Cloud-Verbindung.","cloud.title":"Mux Cloud","cloud.desc":"Nutzen Sie diesen Rechner im Browser auf einem anderen Computer oder vom Smartphone aus. Unterhaltungen bleiben auf diesem Rechner; Mux Cloud leitet sie nur weiter.","cloud.notice":"Wer bei diesem Mux-Cloud-Konto angemeldet ist, kann diesen Rechner aus der Ferne nutzen, als säße er davor, einschließlich der Freigabe von Werkzeugen, die Dateien bearbeiten und Befehle ausführen. Damit die Fernnutzung für diese Werkzeuge nur lesend bleibt, schalten Sie nach der Anmeldung die Fernfreigabe von Werkzeugen aus.","cloud.email":"E-Mail","cloud.password":"Passwort","cloud.server":"Server","cloud.machineName":"Rechnername","cloud.signIn":"Anmelden","cloud.signingIn":"Anmeldung läuft…","cloud.signOut":"Abmelden","cloud.statusLbl":"Status","cloud.account":"Konto","cloud.machine":"Rechner","cloud.remoteApproval":"Entfernten Benutzern erlauben, Werkzeuge auf diesem Rechner freizugeben","cloud.open":"Mux Cloud öffnen","cloud.failed":"Anmeldung fehlgeschlagen: ","cloud.required":"Geben Sie E-Mail-Adresse und Passwort ein.","cloud.noAccount":"Noch kein Konto?","cloud.createAccountAt":"Erstellen Sie eines unter {url}",
+"chat.folder":"Ordner","chat.folder.ph":"Standardordner","chat.folder.tip":"Wählen Sie einen zuletzt verwendeten Ordner oder geben Sie einen beliebigen Ordnerpfad auf diesem Rechner für eine neue Unterhaltung ein. Eine geöffnete Unterhaltung behält ihren Startordner.","chat.autoApprove":"Auto-Freigabe","chat.autoApprove.tip":"Führt Werkzeuge, die Dateien bearbeiten oder Befehle ausführen, ohne Rückfrage aus. Wird in diesem Browser gespeichert.","chat.autoApprove.on":"Automatische Freigabe ist an: Werkzeuge laufen ohne Rückfrage.","chat.autoApprove.offRemote":"Nicht verfügbar: Der Besitzer dieses Rechners erlaubt keine Freigabe von Werkzeugen über Mux Cloud.","chat.autoApprove.offReadOnly":"Nicht verfügbar: Dieser mux-Server lehnt Werkzeuge ab, die Dateien bearbeiten oder Befehle ausführen.",
 "pal.title":"Farbpalette","pal.system":"System (dem OS folgen)","pal.custom":"eigene","pal.new":"Neue Palette…","pal.edit":"Palette bearbeiten","pal.delete":"Palette löschen","pal.deleteConfirm":"Palette „{name}“ löschen?","pal.saved":"Palette gespeichert","pal.hint":"Paletten und die aktive Auswahl werden mit der Terminal-Oberfläche, der Desktop-App und VS Code geteilt.","pal.id":"ID","pal.idTip":"Kleinbuchstaben in Kebab-Case, z. B. my-palette.","pal.name":"Name","pal.dark":"Dunkle Palette","pal.base":"Basispalette","pal.baseTip":"Liefert leer gelassene Farben.","pal.colors":"Farben (Hex)","ep.import":"Modelle importieren…","ep.importTitle":"Modelle von {name} importieren","ep.importHint":"Jedes gewählte Modell wird ein eigener Endpunkt mit den Einstellungen und Zugangsdaten dieses Endpunkts.","ep.importBtn":"Importieren","ep.importNone":"Keine neuen Modelle gefunden.","ep.importFailed":"Das Backend hat seine Modelle nicht aufgelistet.","ep.importAdded":"{n} Endpunkt(e) hinzugefügt.","ep.importQuerying":"Frage Modelle von {name} ab…",
 "nav.home":"Start","nav.chat":"Chat","nav.endpoints":"Endpunkte","nav.mcp":"MCP-Server","nav.prompts":"Prompts","nav.subagents":"Subagenten","nav.hooks":"Hooks","nav.commands":"Befehle","nav.keybindings":"Tastenkürzel","nav.skills":"Fähigkeiten","nav.sessions":"Sitzungen","nav.settings":"Einstellungen",
 "grp.config":"Konfiguration","grp.system":"System",
 "vt.mcp":"MCP-Server","vt.hooks":"Ereignis-Hooks","vt.commands":"Benutzerdefinierte Befehle",
-"act.validate":"Prüfen","mcp.val.running":"Verbinde…","mcp.val.connected":"Verbunden","mcp.val.failed":"Fehlgeschlagen","mcp.val.tools":"Werkzeuge","mcp.val.copy":"Details kopieren","act.reload":"Neu laden","act.save":"Speichern","act.cancel":"Abbrechen","act.close":"Schließen","act.delete":"Löschen","act.edit":"Bearbeiten","act.duplicate":"Duplizieren","act.viewjson":"JSON anzeigen","act.copyjson":"JSON kopieren","act.copyskill":"⧉ SKILL.md kopieren","act.copy":"Kopieren","act.retry":"Wiederholen","act.view":"Ansehen","act.enable":"Aktivieren","act.disable":"Deaktivieren","act.confirm":"Bestätigen","act.savesettings":"Einstellungen speichern","act.allsessions":"Alle Sitzungen",
+"act.validate":"Prüfen","mcp.val.running":"Verbinde…","mcp.val.connected":"Verbunden","mcp.val.failed":"Fehlgeschlagen","mcp.val.tools":"Werkzeuge","mcp.val.copy":"Details kopieren","act.reload":"Neu laden","act.save":"Speichern","act.cancel":"Abbrechen","act.close":"Schließen","act.delete":"Löschen","act.edit":"Bearbeiten","act.duplicate":"Duplizieren","act.viewjson":"JSON anzeigen","act.copyjson":"JSON kopieren","act.copyskill":"⧉ SKILL.md kopieren","act.showPassword":"Passwort anzeigen","act.hidePassword":"Passwort verbergen","act.showKey":"Schlüssel anzeigen","act.hideKey":"Schlüssel verbergen","act.copy":"Kopieren","act.retry":"Wiederholen","act.view":"Ansehen","act.enable":"Aktivieren","act.disable":"Deaktivieren","act.confirm":"Bestätigen","act.savesettings":"Einstellungen speichern","act.allsessions":"Alle Sitzungen",
 "add.endpoint":"Endpunkt hinzufügen","add.server":"Server hinzufügen","add.profile":"Profil hinzufügen","add.subagent":"Subagent hinzufügen","add.hook":"Hook hinzufügen","add.command":"Befehl hinzufügen","add.binding":"Tastenkürzel hinzufügen","add.skill":"Fähigkeit hinzufügen","act.packs":"Fähigkeitspakete","pack.none":"Diese Version enthält keine Fähigkeitspakete.","pack.install":"Installieren","pack.remove":"Entfernen","pack.installAll":"Alle installieren","pack.removeAll":"Installierte entfernen","pack.installed":"Installiert","pack.removed":"Entfernt","pack.skipped":"übersprungen","act.newchat":"Neuer Chat",
 "tbl.rows":"Zeilen","tbl.columns":"Spalten","tbl.filter":"Filtern…","tbl.norows":"Keine Zeile entspricht den Filtern.","tbl.record":"Eintrag","tbl.records":"Einträge","tbl.loading":"Wird geladen…","tbl.failed":"Laden fehlgeschlagen.","tbl.showing":"{a}–{b} von {n}",
 "toast.saved":"Gespeichert","toast.deleted":"Gelöscht","toast.created":"Erstellt","toast.copied":"In die Zwischenablage kopiert","toast.nameReq":"Name ist erforderlich","toast.exported":"Exportiert",
@@ -923,11 +1009,14 @@ de:{
 "lang.label":"Sprache"
 },
 zh:{
+"cloud.remoteApprovalShort":"远程工具批准","cloud.remoteApprovalHint":"关闭后，通过 Mux Cloud 启动的运行会拒绝编辑文件或运行命令的工具。",
+"cloud.state.unavailable":"不可用","cloud.state.not_signed_in":"未登录","cloud.state.off":"已关闭","cloud.state.connecting":"正在连接","cloud.state.connected":"已连接","cloud.state.reconnecting":"正在重新连接","cloud.state.signed_out":"已退出登录","cloud.state.removed":"已移除","cloud.reason.not_signed_in":"此计算机尚未登录 Mux Cloud。","cloud.reason.turned_off":"此计算机上的 Mux Cloud 连接已关闭。","cloud.reason.agent_not_running":"mux 代理未运行。它运行后连接会自动开始。","cloud.reason.another_process":"此计算机上的另一个 mux 进程正在维持 Mux Cloud 连接。","cloud.reason.clock_skew":"此计算机的时钟偏差超过 2 分钟。校正时钟后，mux 会重新连接。","cloud.reason.credential_rejected":"Mux Cloud 不再接受此计算机的登录。请重新登录。","cloud.reason.removed":"此计算机已从 Mux Cloud 中移除。请重新登录以重新连接。","cloud.reason.upgrade_required":"Mux Cloud 需要更新版本的 mux。请升级 mux 后重新连接。","cloud.reason.unreachable":"无法连接 Mux Cloud。mux 会继续尝试。","cloud.reason.connection_dropped":"与 Mux Cloud 的连接已断开。mux 会继续尝试。","cloud.reason.heartbeat_timeout":"与 Mux Cloud 的连接已停止响应。mux 会继续尝试。","cloud.reason.replaced":"此计算机的另一个连接已取代当前连接。","cloud.reason.server_restarting":"Mux Cloud 正在重启。恢复后 mux 会重新连接。","cloud.reason.rate_limited":"失败次数过多。mux 会等待一段时间后再试。","cloud.reason.handshake_rejected":"Mux Cloud 未接受连接。mux 会继续尝试。","cloud.reason.not_hosted_here":"此计算机上的另一个 mux 进程正在维持 Mux Cloud 连接。","cloud.title":"Mux Cloud","cloud.desc":"在另一台计算机的浏览器或手机上使用此计算机。对话保留在此计算机上，Mux Cloud 仅负责转发。","cloud.notice":"任何登录此 Mux Cloud 帐户的人都可以远程使用这台计算机，就像坐在它前面一样，包括批准编辑文件和运行命令的工具。若要让这些工具的远程使用保持只读，请在登录后关闭远程工具批准。","cloud.email":"电子邮件","cloud.password":"密码","cloud.server":"服务器","cloud.machineName":"计算机名称","cloud.signIn":"登录","cloud.signingIn":"正在登录…","cloud.signOut":"退出登录","cloud.statusLbl":"状态","cloud.account":"帐户","cloud.machine":"计算机","cloud.remoteApproval":"允许远程用户在此计算机上批准工具","cloud.open":"打开 Mux Cloud","cloud.failed":"登录失败：","cloud.required":"请输入电子邮件和密码。","cloud.noAccount":"还没有帐户？","cloud.createAccountAt":"在 {url} 创建一个",
+"chat.folder":"文件夹","chat.folder.ph":"默认文件夹","chat.folder.tip":"为新对话选择最近使用的文件夹，或输入此计算机上的任意文件夹路径。已打开的对话保留其开始时的文件夹。","chat.autoApprove":"自动批准","chat.autoApprove.tip":"无需确认即可运行会编辑文件或执行命令的工具。保存在此浏览器中。","chat.autoApprove.on":"自动批准已开启：工具会直接运行，不再询问。","chat.autoApprove.offRemote":"不可用：此机器的所有者不允许通过 Mux Cloud 批准工具。","chat.autoApprove.offReadOnly":"不可用：此 mux 服务器拒绝会编辑文件或执行命令的工具。",
 "pal.title":"调色板","pal.system":"系统（跟随操作系统）","pal.custom":"自定义","pal.new":"新建调色板…","pal.edit":"编辑调色板","pal.delete":"删除调色板","pal.deleteConfirm":"删除调色板“{name}”？","pal.saved":"调色板已保存","pal.hint":"调色板和当前选择会与终端界面、桌面应用和 VS Code 共享。","pal.id":"ID","pal.idTip":"小写 kebab-case，例如 my-palette。","pal.name":"名称","pal.dark":"深色调色板","pal.base":"基础调色板","pal.baseTip":"为留空的颜色提供取值。","pal.colors":"颜色（十六进制）","ep.import":"导入模型…","ep.importTitle":"从 {name} 导入模型","ep.importHint":"所选的每个模型都会成为一个独立端点，沿用此端点的设置和凭据。","ep.importBtn":"导入","ep.importNone":"未发现新模型。","ep.importFailed":"后端未列出其模型。","ep.importAdded":"已添加 {n} 个端点。","ep.importQuerying":"正在向 {name} 查询模型…",
 "nav.home":"主页","nav.chat":"聊天","nav.endpoints":"端点","nav.mcp":"MCP 服务器","nav.prompts":"提示词","nav.subagents":"子代理","nav.hooks":"钩子","nav.commands":"命令","nav.keybindings":"快捷键","nav.skills":"技能","nav.sessions":"会话","nav.settings":"设置",
 "grp.config":"配置","grp.system":"系统",
 "vt.mcp":"MCP 服务器","vt.hooks":"事件钩子","vt.commands":"自定义命令",
-"act.validate":"验证","mcp.val.running":"正在连接…","mcp.val.connected":"已连接","mcp.val.failed":"失败","mcp.val.tools":"工具","mcp.val.copy":"复制详细信息","act.reload":"重新加载","act.save":"保存","act.cancel":"取消","act.close":"关闭","act.delete":"删除","act.edit":"编辑","act.duplicate":"复制","act.viewjson":"查看 JSON","act.copyjson":"复制 JSON","act.copyskill":"⧉ 复制 SKILL.md","act.copy":"复制","act.retry":"重试","act.view":"查看","act.enable":"启用","act.disable":"停用","act.confirm":"确认","act.savesettings":"保存设置","act.allsessions":"所有会话",
+"act.validate":"验证","mcp.val.running":"正在连接…","mcp.val.connected":"已连接","mcp.val.failed":"失败","mcp.val.tools":"工具","mcp.val.copy":"复制详细信息","act.reload":"重新加载","act.save":"保存","act.cancel":"取消","act.close":"关闭","act.delete":"删除","act.edit":"编辑","act.duplicate":"复制","act.viewjson":"查看 JSON","act.copyjson":"复制 JSON","act.copyskill":"⧉ 复制 SKILL.md","act.showPassword":"显示密码","act.hidePassword":"隐藏密码","act.showKey":"显示密钥","act.hideKey":"隐藏密钥","act.copy":"复制","act.retry":"重试","act.view":"查看","act.enable":"启用","act.disable":"停用","act.confirm":"确认","act.savesettings":"保存设置","act.allsessions":"所有会话",
 "add.endpoint":"添加端点","add.server":"添加服务器","add.profile":"添加配置","add.subagent":"添加子代理","add.hook":"添加钩子","add.command":"添加命令","add.binding":"添加快捷键","add.skill":"添加技能","act.packs":"技能包","pack.none":"此版本未包含技能包。","pack.install":"安装","pack.remove":"移除","pack.installAll":"全部安装","pack.removeAll":"移除已安装","pack.installed":"已安装","pack.removed":"已移除","pack.skipped":"已跳过","act.newchat":"新建聊天",
 "tbl.rows":"行数","tbl.columns":"列","tbl.filter":"筛选…","tbl.norows":"没有符合筛选条件的行。","tbl.record":"条","tbl.records":"条","tbl.loading":"加载中…","tbl.failed":"加载失败。","tbl.showing":"显示第 {a}–{b} 项，共 {n} 项",
 "toast.saved":"已保存","toast.deleted":"已删除","toast.created":"已创建","toast.copied":"已复制到剪贴板","toast.nameReq":"名称为必填项","toast.exported":"已导出",
@@ -945,11 +1034,14 @@ zh:{
 "lang.label":"语言"
 },
 ar:{
+"cloud.remoteApprovalShort":"الموافقة على الأدوات عن بُعد","cloud.remoteApprovalHint":"عند إيقافها، ترفض العمليات التي تبدأ عبر Mux Cloud الأدوات التي تعدّل الملفات أو تشغّل الأوامر.",
+"cloud.state.unavailable":"غير متاح","cloud.state.not_signed_in":"لم يتم تسجيل الدخول","cloud.state.off":"متوقف","cloud.state.connecting":"جارٍ الاتصال","cloud.state.connected":"متصل","cloud.state.reconnecting":"جارٍ إعادة الاتصال","cloud.state.signed_out":"تم تسجيل الخروج","cloud.state.removed":"تمت الإزالة","cloud.reason.not_signed_in":"هذا الجهاز غير مسجّل الدخول إلى Mux Cloud.","cloud.reason.turned_off":"الاتصال بـ Mux Cloud متوقف على هذا الجهاز.","cloud.reason.agent_not_running":"وكيل mux لا يعمل. يبدأ الاتصال عند تشغيله.","cloud.reason.another_process":"عملية mux أخرى على هذا الجهاز تتولى الاتصال بـ Mux Cloud.","cloud.reason.clock_skew":"ساعة هذا الجهاز منحرفة بأكثر من دقيقتين. اضبط الساعة وسيعيد mux الاتصال.","cloud.reason.credential_rejected":"لم يعد Mux Cloud يقبل تسجيل دخول هذا الجهاز. سجّل الدخول مرة أخرى.","cloud.reason.removed":"تمت إزالة هذا الجهاز من Mux Cloud. سجّل الدخول مرة أخرى لإعادة توصيله.","cloud.reason.upgrade_required":"يحتاج Mux Cloud إلى إصدار أحدث من mux. حدّث mux ثم أعد الاتصال.","cloud.reason.unreachable":"تعذّر الوصول إلى Mux Cloud. يواصل mux المحاولة.","cloud.reason.connection_dropped":"انقطع الاتصال بـ Mux Cloud. يواصل mux المحاولة.","cloud.reason.heartbeat_timeout":"توقف الاتصال بـ Mux Cloud عن الاستجابة. يواصل mux المحاولة.","cloud.reason.replaced":"حلّ اتصال آخر لهذا الجهاز محل هذا الاتصال.","cloud.reason.server_restarting":"يُعاد تشغيل Mux Cloud. سيعيد mux الاتصال عند عودته.","cloud.reason.rate_limited":"محاولات فاشلة كثيرة جدًا. ينتظر mux قبل المحاولة مرة أخرى.","cloud.reason.handshake_rejected":"لم يقبل Mux Cloud الاتصال. يواصل mux المحاولة.","cloud.reason.not_hosted_here":"عملية mux أخرى على هذا الجهاز تتولى الاتصال بـ Mux Cloud.","cloud.title":"Mux Cloud","cloud.desc":"استخدم هذا الجهاز من متصفح على حاسوب آخر أو من هاتفك. تبقى المحادثات على هذا الجهاز، وMux Cloud يمررها فقط.","cloud.notice":"يمكن لأي شخص مسجّل الدخول إلى حساب Mux Cloud هذا استخدام هذا الجهاز عن بُعد كأنه أمامه، بما في ذلك الموافقة على أدوات تعدّل الملفات وتشغّل الأوامر. لإبقاء الاستخدام عن بُعد للقراءة فقط لهذه الأدوات، أوقف الموافقة على الأدوات عن بُعد بعد تسجيل الدخول.","cloud.email":"البريد الإلكتروني","cloud.password":"كلمة المرور","cloud.server":"الخادم","cloud.machineName":"اسم الجهاز","cloud.signIn":"تسجيل الدخول","cloud.signingIn":"جارٍ تسجيل الدخول…","cloud.signOut":"تسجيل الخروج","cloud.statusLbl":"الحالة","cloud.account":"الحساب","cloud.machine":"الجهاز","cloud.remoteApproval":"السماح للمستخدمين عن بُعد بالموافقة على الأدوات على هذا الجهاز","cloud.open":"فتح Mux Cloud","cloud.failed":"فشل تسجيل الدخول: ","cloud.required":"أدخل بريدك الإلكتروني وكلمة المرور.","cloud.noAccount":"ليس لديك حساب بعد؟","cloud.createAccountAt":"أنشئ حسابًا على {url}",
+"chat.folder":"المجلد","chat.folder.ph":"المجلد الافتراضي","chat.folder.tip":"اختر مجلدًا حديثًا أو اكتب مسار أي مجلد على هذا الجهاز لمحادثة جديدة. تحتفظ المحادثة المفتوحة بالمجلد الذي بدأت فيه.","chat.autoApprove":"موافقة تلقائية","chat.autoApprove.tip":"تشغيل الأدوات التي تعدّل الملفات أو تنفّذ الأوامر دون طلب موافقة. يُحفظ في هذا المتصفح.","chat.autoApprove.on":"الموافقة التلقائية مفعّلة: تعمل الأدوات دون سؤال.","chat.autoApprove.offRemote":"غير متاح: مالك هذا الجهاز لا يسمح بالموافقة على الأدوات عبر Mux Cloud.","chat.autoApprove.offReadOnly":"غير متاح: يرفض خادم mux هذا الأدوات التي تعدّل الملفات أو تنفّذ الأوامر.",
 "pal.title":"لوحة الألوان","pal.system":"النظام (اتباع نظام التشغيل)","pal.custom":"مخصّصة","pal.new":"لوحة جديدة…","pal.edit":"تعديل اللوحة","pal.delete":"حذف اللوحة","pal.deleteConfirm":"حذف اللوحة «{name}»؟","pal.saved":"تم حفظ اللوحة","pal.hint":"تُشارك اللوحات والاختيار النشط مع واجهة الطرفية وتطبيق سطح المكتب وVS Code.","pal.id":"المعرّف","pal.idTip":"أحرف صغيرة بصيغة kebab-case، مثل my-palette.","pal.name":"الاسم","pal.dark":"لوحة داكنة","pal.base":"اللوحة الأساسية","pal.baseTip":"توفّر الألوان المتروكة فارغة.","pal.colors":"الألوان (ست عشري)","ep.import":"استيراد النماذج…","ep.importTitle":"استيراد النماذج من {name}","ep.importHint":"يصبح كل نموذج تختاره نقطة نهاية مستقلة بإعدادات نقطة النهاية هذه وبيانات اعتمادها.","ep.importBtn":"استيراد","ep.importNone":"لم يُعثر على نماذج جديدة.","ep.importFailed":"لم يعرض الخادم نماذجه.","ep.importAdded":"أُضيفت {n} نقطة نهاية.","ep.importQuerying":"جارٍ سؤال {name} عن نماذجه…",
 "nav.home":"الرئيسية","nav.chat":"الدردشة","nav.endpoints":"نقاط النهاية","nav.mcp":"خوادم MCP","nav.prompts":"التوجيهات","nav.subagents":"الوكلاء الفرعيون","nav.hooks":"الخطافات","nav.commands":"الأوامر","nav.keybindings":"اختصارات المفاتيح","nav.skills":"المهارات","nav.sessions":"الجلسات","nav.settings":"الإعدادات",
 "grp.config":"الإعداد","grp.system":"النظام",
 "vt.mcp":"خوادم MCP","vt.hooks":"خطافات الأحداث","vt.commands":"أوامر مخصصة",
-"act.validate":"تحقق","mcp.val.running":"جارٍ الاتصال…","mcp.val.connected":"متصل","mcp.val.failed":"فشل","mcp.val.tools":"الأدوات","mcp.val.copy":"نسخ التفاصيل","act.reload":"إعادة تحميل","act.save":"حفظ","act.cancel":"إلغاء","act.close":"إغلاق","act.delete":"حذف","act.edit":"تعديل","act.duplicate":"تكرار","act.viewjson":"عرض JSON","act.copyjson":"نسخ JSON","act.copyskill":"⧉ نسخ SKILL.md","act.copy":"نسخ","act.retry":"إعادة المحاولة","act.view":"عرض","act.enable":"تفعيل","act.disable":"تعطيل","act.confirm":"تأكيد","act.savesettings":"حفظ الإعدادات","act.allsessions":"كل الجلسات",
+"act.validate":"تحقق","mcp.val.running":"جارٍ الاتصال…","mcp.val.connected":"متصل","mcp.val.failed":"فشل","mcp.val.tools":"الأدوات","mcp.val.copy":"نسخ التفاصيل","act.reload":"إعادة تحميل","act.save":"حفظ","act.cancel":"إلغاء","act.close":"إغلاق","act.delete":"حذف","act.edit":"تعديل","act.duplicate":"تكرار","act.viewjson":"عرض JSON","act.copyjson":"نسخ JSON","act.copyskill":"⧉ نسخ SKILL.md","act.showPassword":"إظهار كلمة المرور","act.hidePassword":"إخفاء كلمة المرور","act.showKey":"إظهار المفتاح","act.hideKey":"إخفاء المفتاح","act.copy":"نسخ","act.retry":"إعادة المحاولة","act.view":"عرض","act.enable":"تفعيل","act.disable":"تعطيل","act.confirm":"تأكيد","act.savesettings":"حفظ الإعدادات","act.allsessions":"كل الجلسات",
 "add.endpoint":"إضافة نقطة نهاية","add.server":"إضافة خادم","add.profile":"إضافة ملف تعريف","add.subagent":"إضافة وكيل فرعي","add.hook":"إضافة خطاف","add.command":"إضافة أمر","add.binding":"إضافة اختصار","add.skill":"إضافة مهارة","act.packs":"حزم المهارات","pack.none":"لا يتضمن هذا الإصدار حزم مهارات.","pack.install":"تثبيت","pack.remove":"إزالة","pack.installAll":"تثبيت الكل","pack.removeAll":"إزالة المثبتة","pack.installed":"تم التثبيت","pack.removed":"تمت الإزالة","pack.skipped":"تم التخطي","act.newchat":"دردشة جديدة",
 "tbl.rows":"الصفوف","tbl.columns":"الأعمدة","tbl.filter":"تصفية…","tbl.norows":"لا توجد صفوف مطابقة للمرشحات.","tbl.record":"سجل","tbl.records":"سجلات","tbl.loading":"جارٍ التحميل…","tbl.failed":"فشل التحميل.","tbl.showing":"عرض {a}–{b} من {n}",
 "toast.saved":"تم الحفظ","toast.deleted":"تم الحذف","toast.created":"تم الإنشاء","toast.copied":"تم النسخ إلى الحافظة","toast.nameReq":"الاسم مطلوب","toast.exported":"تم التصدير",
@@ -967,11 +1059,14 @@ ar:{
 "lang.label":"اللغة"
 },
 ru:{
+"cloud.remoteApprovalShort":"Удалённое одобрение инструментов","cloud.remoteApprovalHint":"Если отключено, запуски из Mux Cloud отклоняют инструменты, которые изменяют файлы или выполняют команды.",
+"cloud.state.unavailable":"Недоступно","cloud.state.not_signed_in":"Вход не выполнен","cloud.state.off":"Выключено","cloud.state.connecting":"Подключение","cloud.state.connected":"Подключено","cloud.state.reconnecting":"Переподключение","cloud.state.signed_out":"Выполнен выход","cloud.state.removed":"Удалено","cloud.reason.not_signed_in":"Этот компьютер не выполнил вход в Mux Cloud.","cloud.reason.turned_off":"Подключение к Mux Cloud на этом компьютере выключено.","cloud.reason.agent_not_running":"Агент mux не запущен. Подключение начнётся, когда он запустится.","cloud.reason.another_process":"Подключением к Mux Cloud управляет другой процесс mux на этом компьютере.","cloud.reason.clock_skew":"Часы этого компьютера отклоняются более чем на 2 минуты. Исправьте время, и mux переподключится.","cloud.reason.credential_rejected":"Mux Cloud больше не принимает вход этого компьютера. Войдите снова.","cloud.reason.removed":"Этот компьютер удалён из Mux Cloud. Войдите снова, чтобы подключить его.","cloud.reason.upgrade_required":"Mux Cloud требуется более новая версия mux. Обновите mux и подключитесь снова.","cloud.reason.unreachable":"Mux Cloud недоступен. mux продолжает попытки.","cloud.reason.connection_dropped":"Соединение с Mux Cloud прервалось. mux продолжает попытки.","cloud.reason.heartbeat_timeout":"Соединение с Mux Cloud перестало отвечать. mux продолжает попытки.","cloud.reason.replaced":"Другое подключение этого компьютера заменило текущее.","cloud.reason.server_restarting":"Mux Cloud перезапускается. mux переподключится, когда он снова станет доступен.","cloud.reason.rate_limited":"Слишком много неудачных попыток. mux подождёт перед следующей.","cloud.reason.handshake_rejected":"Mux Cloud не принял подключение. mux продолжает попытки.","cloud.reason.not_hosted_here":"Подключением к Mux Cloud управляет другой процесс mux на этом компьютере.","cloud.title":"Mux Cloud","cloud.desc":"Работайте с этим компьютером из браузера на другом устройстве или с телефона. Разговоры остаются на этом компьютере; Mux Cloud только передаёт их.","cloud.notice":"Любой, кто вошёл в эту учётную запись Mux Cloud, может пользоваться этим компьютером удалённо, как если бы сидел за ним, в том числе одобрять инструменты, которые изменяют файлы и выполняют команды. Чтобы удалённая работа с этими инструментами оставалась только для чтения, отключите удалённое одобрение инструментов после входа.","cloud.email":"Эл. почта","cloud.password":"Пароль","cloud.server":"Сервер","cloud.machineName":"Имя компьютера","cloud.signIn":"Войти","cloud.signingIn":"Вход…","cloud.signOut":"Выйти","cloud.statusLbl":"Статус","cloud.account":"Учётная запись","cloud.machine":"Компьютер","cloud.remoteApproval":"Разрешить удалённым пользователям одобрять инструменты на этом компьютере","cloud.open":"Открыть Mux Cloud","cloud.failed":"Не удалось войти: ","cloud.required":"Введите адрес эл. почты и пароль.","cloud.noAccount":"Ещё нет учётной записи?","cloud.createAccountAt":"Создайте её на {url}",
+"chat.folder":"Папка","chat.folder.ph":"Папка по умолчанию","chat.folder.tip":"Выберите недавнюю папку или введите путь к любой папке на этом компьютере для нового разговора. Открытый разговор сохраняет папку, в которой он начался.","chat.autoApprove":"Автоодобрение","chat.autoApprove.tip":"Запускать без подтверждения инструменты, которые изменяют файлы или выполняют команды. Сохраняется в этом браузере.","chat.autoApprove.on":"Автоодобрение включено: инструменты запускаются без вопросов.","chat.autoApprove.offRemote":"Недоступно: владелец этой машины не разрешает одобрять инструменты через Mux Cloud.","chat.autoApprove.offReadOnly":"Недоступно: этот сервер mux отклоняет инструменты, которые изменяют файлы или выполняют команды.",
 "pal.title":"Цветовая палитра","pal.system":"Системная (как в ОС)","pal.custom":"своя","pal.new":"Новая палитра…","pal.edit":"Изменить палитру","pal.delete":"Удалить палитру","pal.deleteConfirm":"Удалить палитру «{name}»?","pal.saved":"Палитра сохранена","pal.hint":"Палитры и текущий выбор общие для терминального интерфейса, настольного приложения и VS Code.","pal.id":"ID","pal.idTip":"Строчные буквы в kebab-case, например my-palette.","pal.name":"Название","pal.dark":"Тёмная палитра","pal.base":"Базовая палитра","pal.baseTip":"Задаёт незаполненные цвета.","pal.colors":"Цвета (hex)","ep.import":"Импорт моделей…","ep.importTitle":"Импорт моделей из {name}","ep.importHint":"Каждая выбранная модель станет отдельной конечной точкой с настройками и учётными данными этой.","ep.importBtn":"Импортировать","ep.importNone":"Новых моделей не найдено.","ep.importFailed":"Бэкенд не вернул список моделей.","ep.importAdded":"Добавлено конечных точек: {n}.","ep.importQuerying":"Запрашиваю модели у {name}…",
 "nav.home":"Главная","nav.chat":"Чат","nav.endpoints":"Эндпоинты","nav.mcp":"Серверы MCP","nav.prompts":"Промпты","nav.subagents":"Субагенты","nav.hooks":"Хуки","nav.commands":"Команды","nav.keybindings":"Горячие клавиши","nav.skills":"Навыки","nav.sessions":"Сессии","nav.settings":"Настройки",
 "grp.config":"Конфигурация","grp.system":"Система",
 "vt.mcp":"Серверы MCP","vt.hooks":"Хуки событий","vt.commands":"Пользовательские команды",
-"act.validate":"Проверить","mcp.val.running":"Подключение…","mcp.val.connected":"Подключено","mcp.val.failed":"Ошибка","mcp.val.tools":"Инструменты","mcp.val.copy":"Копировать подробности","act.reload":"Обновить","act.save":"Сохранить","act.cancel":"Отмена","act.close":"Закрыть","act.delete":"Удалить","act.edit":"Изменить","act.duplicate":"Дублировать","act.viewjson":"Показать JSON","act.copyjson":"Копировать JSON","act.copyskill":"⧉ Копировать SKILL.md","act.copy":"Копировать","act.retry":"Повторить","act.view":"Просмотр","act.enable":"Включить","act.disable":"Выключить","act.confirm":"Подтвердить","act.savesettings":"Сохранить настройки","act.allsessions":"Все сессии",
+"act.validate":"Проверить","mcp.val.running":"Подключение…","mcp.val.connected":"Подключено","mcp.val.failed":"Ошибка","mcp.val.tools":"Инструменты","mcp.val.copy":"Копировать подробности","act.reload":"Обновить","act.save":"Сохранить","act.cancel":"Отмена","act.close":"Закрыть","act.delete":"Удалить","act.edit":"Изменить","act.duplicate":"Дублировать","act.viewjson":"Показать JSON","act.copyjson":"Копировать JSON","act.copyskill":"⧉ Копировать SKILL.md","act.showPassword":"Показать пароль","act.hidePassword":"Скрыть пароль","act.showKey":"Показать ключ","act.hideKey":"Скрыть ключ","act.copy":"Копировать","act.retry":"Повторить","act.view":"Просмотр","act.enable":"Включить","act.disable":"Выключить","act.confirm":"Подтвердить","act.savesettings":"Сохранить настройки","act.allsessions":"Все сессии",
 "add.endpoint":"Добавить эндпоинт","add.server":"Добавить сервер","add.profile":"Добавить профиль","add.subagent":"Добавить субагента","add.hook":"Добавить хук","add.command":"Добавить команду","add.binding":"Добавить сочетание","add.skill":"Добавить навык","act.packs":"Пакеты навыков","pack.none":"В эту сборку не входят пакеты навыков.","pack.install":"Установить","pack.remove":"Удалить","pack.installAll":"Установить все","pack.removeAll":"Удалить установленные","pack.installed":"Установлено","pack.removed":"Удалено","pack.skipped":"пропущено","act.newchat":"Новый чат",
 "tbl.rows":"Строки","tbl.columns":"Столбцы","tbl.filter":"Фильтр…","tbl.norows":"Нет строк, соответствующих фильтрам.","tbl.record":"запись","tbl.records":"записей","tbl.loading":"Загрузка…","tbl.failed":"Не удалось загрузить.","tbl.showing":"Показаны {a}–{b} из {n}",
 "toast.saved":"Сохранено","toast.deleted":"Удалено","toast.created":"Создано","toast.copied":"Скопировано в буфер обмена","toast.nameReq":"Имя обязательно","toast.exported":"Экспортировано",
@@ -989,11 +1084,14 @@ ru:{
 "lang.label":"Язык"
 },
 ms:{
+"cloud.remoteApprovalShort":"Kelulusan alat jauh","cloud.remoteApprovalHint":"Apabila dimatikan, larian yang dimulakan melalui Mux Cloud menolak alat yang menyunting fail atau menjalankan arahan.",
+"cloud.state.unavailable":"Tidak tersedia","cloud.state.not_signed_in":"Belum log masuk","cloud.state.off":"Dimatikan","cloud.state.connecting":"Menyambung","cloud.state.connected":"Disambungkan","cloud.state.reconnecting":"Menyambung semula","cloud.state.signed_out":"Telah log keluar","cloud.state.removed":"Dibuang","cloud.reason.not_signed_in":"Mesin ini belum log masuk ke Mux Cloud.","cloud.reason.turned_off":"Sambungan Mux Cloud dimatikan pada mesin ini.","cloud.reason.agent_not_running":"Ejen mux tidak berjalan. Sambungan bermula apabila ia berjalan.","cloud.reason.another_process":"Satu lagi proses mux pada mesin ini menjalankan sambungan Mux Cloud.","cloud.reason.clock_skew":"Jam mesin ini tersasar lebih daripada 2 minit. Betulkan jam dan mux akan menyambung semula.","cloud.reason.credential_rejected":"Mux Cloud tidak lagi menerima log masuk mesin ini. Log masuk semula.","cloud.reason.removed":"Mesin ini telah dibuang daripada Mux Cloud. Log masuk semula untuk menyambungkannya kembali.","cloud.reason.upgrade_required":"Mux Cloud memerlukan versi mux yang lebih baharu. Naik taraf mux, kemudian sambung semula.","cloud.reason.unreachable":"Mux Cloud tidak dapat dihubungi. mux terus mencuba.","cloud.reason.connection_dropped":"Sambungan ke Mux Cloud terputus. mux terus mencuba.","cloud.reason.heartbeat_timeout":"Sambungan ke Mux Cloud berhenti bertindak balas. mux terus mencuba.","cloud.reason.replaced":"Sambungan lain bagi mesin ini telah menggantikan sambungan ini.","cloud.reason.server_restarting":"Mux Cloud sedang dimulakan semula. mux akan menyambung semula apabila ia kembali.","cloud.reason.rate_limited":"Terlalu banyak percubaan gagal. mux menunggu sebelum mencuba lagi.","cloud.reason.handshake_rejected":"Mux Cloud tidak menerima sambungan. mux terus mencuba.","cloud.reason.not_hosted_here":"Satu lagi proses mux pada mesin ini menjalankan sambungan Mux Cloud.","cloud.title":"Mux Cloud","cloud.desc":"Gunakan mesin ini dari pelayar pada komputer lain atau dari telefon anda. Perbualan kekal pada mesin ini; Mux Cloud hanya menyalurkannya.","cloud.notice":"Sesiapa yang log masuk ke akaun Mux Cloud ini boleh menggunakan mesin ini dari jauh, seolah-olah berada di hadapannya, termasuk meluluskan alat yang menyunting fail dan menjalankan arahan. Untuk mengekalkan penggunaan jauh baca sahaja bagi alat tersebut, matikan kelulusan alat jauh selepas log masuk.","cloud.email":"E-mel","cloud.password":"Kata laluan","cloud.server":"Pelayan","cloud.machineName":"Nama mesin","cloud.signIn":"Log masuk","cloud.signingIn":"Sedang log masuk…","cloud.signOut":"Log keluar","cloud.statusLbl":"Status","cloud.account":"Akaun","cloud.machine":"Mesin","cloud.remoteApproval":"Benarkan pengguna jauh meluluskan alat pada mesin ini","cloud.open":"Buka Mux Cloud","cloud.failed":"Log masuk gagal: ","cloud.required":"Masukkan e-mel dan kata laluan anda.","cloud.noAccount":"Belum ada akaun?","cloud.createAccountAt":"Cipta satu di {url}",
+"chat.folder":"Folder","chat.folder.ph":"Folder lalai","chat.folder.tip":"Pilih folder terkini atau taip mana-mana laluan folder pada mesin ini untuk perbualan baharu. Perbualan yang dibuka mengekalkan folder tempat ia bermula.","chat.autoApprove":"Lulus auto","chat.autoApprove.tip":"Jalankan alat yang mengedit fail atau menjalankan arahan tanpa meminta kelulusan. Disimpan dalam pelayar ini.","chat.autoApprove.on":"Kelulusan automatik dihidupkan: alat dijalankan tanpa bertanya.","chat.autoApprove.offRemote":"Tidak tersedia: pemilik mesin ini tidak membenarkan kelulusan alat melalui Mux Cloud.","chat.autoApprove.offReadOnly":"Tidak tersedia: pelayan mux ini menolak alat yang mengedit fail atau menjalankan arahan.",
 "pal.title":"Palet warna","pal.system":"Sistem (ikut OS)","pal.custom":"tersuai","pal.new":"Palet baharu…","pal.edit":"Sunting palet","pal.delete":"Padam palet","pal.deleteConfirm":"Padam palet “{name}”?","pal.saved":"Palet disimpan","pal.hint":"Palet dan pilihan aktif dikongsi dengan UI terminal, aplikasi desktop dan VS Code.","pal.id":"Id","pal.idTip":"Huruf kecil kebab-case, contohnya my-palette.","pal.name":"Nama","pal.dark":"Palet gelap","pal.base":"Palet asas","pal.baseTip":"Membekalkan warna yang dibiarkan kosong.","pal.colors":"Warna (hex)","ep.import":"Import model…","ep.importTitle":"Import model daripada {name}","ep.importHint":"Setiap model yang dipilih menjadi titik akhir sendiri dengan tetapan dan kelayakan titik akhir ini.","ep.importBtn":"Import","ep.importNone":"Tiada model baharu ditemui.","ep.importFailed":"Backend tidak menyenaraikan modelnya.","ep.importAdded":"{n} titik akhir ditambah.","ep.importQuerying":"Bertanya {name} tentang modelnya…",
 "nav.home":"Laman Utama","nav.chat":"Sembang","nav.endpoints":"Titik Akhir","nav.mcp":"Pelayan MCP","nav.prompts":"Gesaan","nav.subagents":"Subejen","nav.hooks":"Cangkuk","nav.commands":"Perintah","nav.keybindings":"Pintasan Papan Kekunci","nav.skills":"Kemahiran","nav.sessions":"Sesi","nav.settings":"Tetapan",
 "grp.config":"Konfigurasi","grp.system":"Sistem",
 "vt.mcp":"Pelayan MCP","vt.hooks":"Cangkuk Peristiwa","vt.commands":"Perintah Tersuai",
-"act.validate":"Sahkan","mcp.val.running":"Menyambung…","mcp.val.connected":"Bersambung","mcp.val.failed":"Gagal","mcp.val.tools":"Alat","mcp.val.copy":"Salin butiran","act.reload":"Muat Semula","act.save":"Simpan","act.cancel":"Batal","act.close":"Tutup","act.delete":"Padam","act.edit":"Sunting","act.duplicate":"Salin","act.viewjson":"Lihat JSON","act.copyjson":"Salin JSON","act.copyskill":"⧉ Salin SKILL.md","act.copy":"Salin","act.retry":"Cuba semula","act.view":"Lihat","act.enable":"Dayakan","act.disable":"Lumpuhkan","act.confirm":"Sahkan","act.savesettings":"Simpan tetapan","act.allsessions":"Semua sesi",
+"act.validate":"Sahkan","mcp.val.running":"Menyambung…","mcp.val.connected":"Bersambung","mcp.val.failed":"Gagal","mcp.val.tools":"Alat","mcp.val.copy":"Salin butiran","act.reload":"Muat Semula","act.save":"Simpan","act.cancel":"Batal","act.close":"Tutup","act.delete":"Padam","act.edit":"Sunting","act.duplicate":"Salin","act.viewjson":"Lihat JSON","act.copyjson":"Salin JSON","act.copyskill":"⧉ Salin SKILL.md","act.showPassword":"Tunjukkan kata laluan","act.hidePassword":"Sembunyikan kata laluan","act.showKey":"Tunjukkan kunci","act.hideKey":"Sembunyikan kunci","act.copy":"Salin","act.retry":"Cuba semula","act.view":"Lihat","act.enable":"Dayakan","act.disable":"Lumpuhkan","act.confirm":"Sahkan","act.savesettings":"Simpan tetapan","act.allsessions":"Semua sesi",
 "add.endpoint":"Tambah titik akhir","add.server":"Tambah pelayan","add.profile":"Tambah profil","add.subagent":"Tambah subejen","add.hook":"Tambah cangkuk","add.command":"Tambah perintah","add.binding":"Tambah pintasan","add.skill":"Tambah kemahiran","act.packs":"Pek kemahiran","pack.none":"Binaan ini tidak menyertakan pek kemahiran.","pack.install":"Pasang","pack.remove":"Buang","pack.installAll":"Pasang semua","pack.removeAll":"Buang yang dipasang","pack.installed":"Dipasang","pack.removed":"Dibuang","pack.skipped":"dilangkau","act.newchat":"Sembang baharu",
 "tbl.rows":"Baris","tbl.columns":"Lajur","tbl.filter":"Tapis…","tbl.norows":"Tiada baris sepadan dengan penapis.","tbl.record":"rekod","tbl.records":"rekod","tbl.loading":"Memuatkan…","tbl.failed":"Gagal dimuatkan.","tbl.showing":"Memaparkan {a}–{b} daripada {n}",
 "toast.saved":"Disimpan","toast.deleted":"Dipadam","toast.created":"Dicipta","toast.copied":"Disalin ke papan keratan","toast.nameReq":"Nama diperlukan","toast.exported":"Dieksport",
@@ -1011,11 +1109,14 @@ ms:{
 "lang.label":"Bahasa"
 },
 hi:{
+"cloud.remoteApprovalShort":"दूरस्थ टूल मंज़ूरी","cloud.remoteApprovalHint":"बंद होने पर, Mux Cloud से शुरू हुए रन फ़ाइलें बदलने या कमांड चलाने वाले टूल को अस्वीकार करते हैं।",
+"cloud.state.unavailable":"उपलब्ध नहीं","cloud.state.not_signed_in":"साइन इन नहीं है","cloud.state.off":"बंद","cloud.state.connecting":"कनेक्ट हो रहा है","cloud.state.connected":"कनेक्ट है","cloud.state.reconnecting":"फिर से कनेक्ट हो रहा है","cloud.state.signed_out":"साइन आउट हो गया","cloud.state.removed":"हटा दी गई","cloud.reason.not_signed_in":"यह मशीन Mux Cloud में साइन इन नहीं है।","cloud.reason.turned_off":"इस मशीन पर Mux Cloud कनेक्शन बंद है।","cloud.reason.agent_not_running":"mux एजेंट नहीं चल रहा है। उसके चलने पर कनेक्शन शुरू हो जाएगा।","cloud.reason.another_process":"इस मशीन पर कोई दूसरी mux प्रोसेस Mux Cloud कनेक्शन चला रही है।","cloud.reason.clock_skew":"इस मशीन की घड़ी 2 मिनट से ज़्यादा आगे या पीछे है। घड़ी ठीक करें, mux फिर से कनेक्ट हो जाएगा।","cloud.reason.credential_rejected":"Mux Cloud अब इस मशीन का साइन-इन स्वीकार नहीं करता। फिर से साइन इन करें।","cloud.reason.removed":"यह मशीन Mux Cloud से हटा दी गई। इसे फिर से जोड़ने के लिए दोबारा साइन इन करें।","cloud.reason.upgrade_required":"Mux Cloud को mux के नए संस्करण की ज़रूरत है। mux अपग्रेड करें, फिर से कनेक्ट करें।","cloud.reason.unreachable":"Mux Cloud तक नहीं पहुँचा जा सका। mux कोशिश करता रहेगा।","cloud.reason.connection_dropped":"Mux Cloud से कनेक्शन टूट गया। mux कोशिश करता रहेगा।","cloud.reason.heartbeat_timeout":"Mux Cloud से कनेक्शन ने जवाब देना बंद कर दिया। mux कोशिश करता रहेगा।","cloud.reason.replaced":"इस मशीन के किसी दूसरे कनेक्शन ने इसकी जगह ले ली।","cloud.reason.server_restarting":"Mux Cloud फिर से शुरू हो रहा है। उसके लौटने पर mux फिर से कनेक्ट हो जाएगा।","cloud.reason.rate_limited":"बहुत सारे प्रयास विफल हुए। mux दोबारा कोशिश करने से पहले रुकेगा।","cloud.reason.handshake_rejected":"Mux Cloud ने कनेक्शन स्वीकार नहीं किया। mux कोशिश करता रहेगा।","cloud.reason.not_hosted_here":"इस मशीन पर कोई दूसरी mux प्रोसेस Mux Cloud कनेक्शन चला रही है।","cloud.title":"Mux Cloud","cloud.desc":"इस मशीन को किसी दूसरे कंप्यूटर के ब्राउज़र या अपने फ़ोन से इस्तेमाल करें। बातचीत इसी मशीन पर रहती है; Mux Cloud सिर्फ़ उसे आगे पहुँचाता है।","cloud.notice":"इस Mux Cloud खाते में साइन इन किया हुआ कोई भी व्यक्ति इस मशीन को दूर से ऐसे इस्तेमाल कर सकता है जैसे वह इसके सामने हो, जिसमें फ़ाइलें बदलने और कमांड चलाने वाले टूल को मंज़ूरी देना भी शामिल है। इन टूल के दूरस्थ इस्तेमाल को सिर्फ़ पढ़ने तक रखने के लिए साइन इन करने के बाद दूरस्थ टूल मंज़ूरी बंद करें।","cloud.email":"ईमेल","cloud.password":"पासवर्ड","cloud.server":"सर्वर","cloud.machineName":"मशीन का नाम","cloud.signIn":"साइन इन करें","cloud.signingIn":"साइन इन हो रहा है…","cloud.signOut":"साइन आउट करें","cloud.statusLbl":"स्थिति","cloud.account":"खाता","cloud.machine":"मशीन","cloud.remoteApproval":"दूरस्थ उपयोगकर्ताओं को इस मशीन पर टूल मंज़ूर करने दें","cloud.open":"Mux Cloud खोलें","cloud.failed":"साइन इन विफल: ","cloud.required":"अपना ईमेल और पासवर्ड डालें।","cloud.noAccount":"अभी तक खाता नहीं है?","cloud.createAccountAt":"{url} पर एक बनाएँ",
+"chat.folder":"फ़ोल्डर","chat.folder.ph":"डिफ़ॉल्ट फ़ोल्डर","chat.folder.tip":"नई बातचीत के लिए हाल का फ़ोल्डर चुनें या इस मशीन पर किसी भी फ़ोल्डर का पथ लिखें। खुली बातचीत उसी फ़ोल्डर में रहती है जिसमें वह शुरू हुई थी।","chat.autoApprove":"अपने आप स्वीकृत","chat.autoApprove.tip":"फ़ाइलें बदलने या कमांड चलाने वाले टूल बिना स्वीकृति माँगे चलाएँ। यह इस ब्राउज़र में सहेजा जाता है।","chat.autoApprove.on":"अपने आप स्वीकृति चालू है: टूल बिना पूछे चलते हैं।","chat.autoApprove.offRemote":"उपलब्ध नहीं: इस मशीन के मालिक ने Mux Cloud के ज़रिए टूल स्वीकृत करने की अनुमति नहीं दी है।","chat.autoApprove.offReadOnly":"उपलब्ध नहीं: यह mux सर्वर फ़ाइलें बदलने या कमांड चलाने वाले टूल अस्वीकार करता है।",
 "pal.title":"रंग पैलेट","pal.system":"सिस्टम (OS का पालन करें)","pal.custom":"कस्टम","pal.new":"नया पैलेट…","pal.edit":"पैलेट संपादित करें","pal.delete":"पैलेट हटाएँ","pal.deleteConfirm":"पैलेट “{name}” हटाएँ?","pal.saved":"पैलेट सहेजा गया","pal.hint":"पैलेट और सक्रिय चयन टर्मिनल UI, डेस्कटॉप ऐप और VS Code के साथ साझा होते हैं।","pal.id":"आईडी","pal.idTip":"छोटे अक्षरों में kebab-case, जैसे my-palette।","pal.name":"नाम","pal.dark":"गहरा पैलेट","pal.base":"आधार पैलेट","pal.baseTip":"खाली छोड़े गए रंग देता है।","pal.colors":"रंग (hex)","ep.import":"मॉडल आयात करें…","ep.importTitle":"{name} से मॉडल आयात करें","ep.importHint":"चुना गया हर मॉडल इस एंडपॉइंट की सेटिंग और क्रेडेंशियल के साथ अपना एंडपॉइंट बनेगा।","ep.importBtn":"आयात करें","ep.importNone":"कोई नया मॉडल नहीं मिला।","ep.importFailed":"बैकएंड ने अपने मॉडल सूचीबद्ध नहीं किए।","ep.importAdded":"{n} एंडपॉइंट जोड़े गए।","ep.importQuerying":"{name} से मॉडल पूछे जा रहे हैं…",
 "nav.home":"होम","nav.chat":"चैट","nav.endpoints":"एंडपॉइंट","nav.mcp":"MCP सर्वर","nav.prompts":"प्रॉम्प्ट","nav.subagents":"सबएजेंट","nav.hooks":"हुक","nav.commands":"कमांड","nav.keybindings":"कीबाइंडिंग","nav.skills":"स्किल","nav.sessions":"सत्र","nav.settings":"सेटिंग्स",
 "grp.config":"कॉन्फ़िगरेशन","grp.system":"सिस्टम",
 "vt.mcp":"MCP सर्वर","vt.hooks":"इवेंट हुक","vt.commands":"कस्टम कमांड",
-"act.validate":"सत्यापित करें","mcp.val.running":"कनेक्ट हो रहा है…","mcp.val.connected":"कनेक्ट हुआ","mcp.val.failed":"विफल","mcp.val.tools":"टूल","mcp.val.copy":"विवरण कॉपी करें","act.reload":"पुनः लोड करें","act.save":"सहेजें","act.cancel":"रद्द करें","act.close":"बंद करें","act.delete":"हटाएँ","act.edit":"संपादित करें","act.duplicate":"डुप्लिकेट","act.viewjson":"JSON देखें","act.copyjson":"JSON कॉपी करें","act.copyskill":"⧉ SKILL.md कॉपी करें","act.copy":"कॉपी","act.retry":"पुनः प्रयास","act.view":"देखें","act.enable":"सक्षम करें","act.disable":"अक्षम करें","act.confirm":"पुष्टि करें","act.savesettings":"सेटिंग्स सहेजें","act.allsessions":"सभी सत्र",
+"act.validate":"सत्यापित करें","mcp.val.running":"कनेक्ट हो रहा है…","mcp.val.connected":"कनेक्ट हुआ","mcp.val.failed":"विफल","mcp.val.tools":"टूल","mcp.val.copy":"विवरण कॉपी करें","act.reload":"पुनः लोड करें","act.save":"सहेजें","act.cancel":"रद्द करें","act.close":"बंद करें","act.delete":"हटाएँ","act.edit":"संपादित करें","act.duplicate":"डुप्लिकेट","act.viewjson":"JSON देखें","act.copyjson":"JSON कॉपी करें","act.copyskill":"⧉ SKILL.md कॉपी करें","act.showPassword":"पासवर्ड दिखाएँ","act.hidePassword":"पासवर्ड छिपाएँ","act.showKey":"कुंजी दिखाएँ","act.hideKey":"कुंजी छिपाएँ","act.copy":"कॉपी","act.retry":"पुनः प्रयास","act.view":"देखें","act.enable":"सक्षम करें","act.disable":"अक्षम करें","act.confirm":"पुष्टि करें","act.savesettings":"सेटिंग्स सहेजें","act.allsessions":"सभी सत्र",
 "add.endpoint":"एंडपॉइंट जोड़ें","add.server":"सर्वर जोड़ें","add.profile":"प्रोफ़ाइल जोड़ें","add.subagent":"सबएजेंट जोड़ें","add.hook":"हुक जोड़ें","add.command":"कमांड जोड़ें","add.binding":"बाइंडिंग जोड़ें","add.skill":"स्किल जोड़ें","act.packs":"स्किल पैक","pack.none":"इस बिल्ड में कोई स्किल पैक शामिल नहीं है।","pack.install":"इंस्टॉल करें","pack.remove":"हटाएँ","pack.installAll":"सभी इंस्टॉल करें","pack.removeAll":"इंस्टॉल किए गए हटाएँ","pack.installed":"इंस्टॉल किए गए","pack.removed":"हटाए गए","pack.skipped":"छोड़े गए","act.newchat":"नई चैट",
 "tbl.rows":"पंक्तियाँ","tbl.columns":"कॉलम","tbl.filter":"फ़िल्टर…","tbl.norows":"किसी भी पंक्ति में फ़िल्टर मेल नहीं खाते।","tbl.record":"रिकॉर्ड","tbl.records":"रिकॉर्ड","tbl.loading":"लोड हो रहा है…","tbl.failed":"लोड करने में विफल।","tbl.showing":"{n} में से {a}–{b} दिखा रहे हैं",
 "toast.saved":"सहेजा गया","toast.deleted":"हटाया गया","toast.created":"बनाया गया","toast.copied":"क्लिपबोर्ड पर कॉपी किया गया","toast.nameReq":"नाम आवश्यक है","toast.exported":"निर्यात किया गया",
@@ -1037,13 +1138,30 @@ var LOCALE=(function(){try{return localStorage.getItem("mux.lang")||"en";}catch(
 if(!I18N[LOCALE])LOCALE="en";
 function t(k,p){var s=(I18N[LOCALE]&&I18N[LOCALE][k]!=null)?I18N[LOCALE][k]:(I18N.en[k]!=null?I18N.en[k]:k);if(p)for(var x in p)s=(""+s).split("{"+x+"}").join(p[x]);return s;}
 function viewTitle(v){var m={mcp:"vt.mcp",hooks:"vt.hooks",commands:"vt.commands"};return t(m[v]||("nav."+v));}
+/* Reveal toggles for password and key fields. Each .pwreveal button sits in a .pwwrap beside its input;
+   pwSync sets its icon and translated label from the input's current type, so applyI18n re-labels them. */
+var PW_ICON={
+ show:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12Z"/><circle cx="12" cy="12" r="3"/></svg>',
+ hide:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.9 4.24A9.1 9.1 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><path d="M6.61 6.61A13.5 13.5 0 0 0 1 12s4 8 11 8a9.7 9.7 0 0 0 5.39-1.61"/><path d="M14.12 14.12a3 3 0 1 1-4.24-4.24"/><path d="M1 1l22 22"/></svg>'
+};
+function pwHtml(input,kind){return '<div class="pwwrap">'+input+'<button type="button" class="pwreveal" data-pw-kind="'+(kind||"password")+'"></button></div>';}
+function pwSync(b){var inp=b.parentNode&&b.parentNode.querySelector("input");if(!inp)return;var shown=inp.type==="text";
+  var lbl=t((shown?"act.hide":"act.show")+(b.getAttribute("data-pw-kind")==="key"?"Key":"Password"));
+  b.title=lbl;b.setAttribute("aria-label",lbl);b.innerHTML=shown?PW_ICON.hide:PW_ICON.show;}
+function pwSyncAll(root){var bs=(root||document).querySelectorAll(".pwreveal");for(var i=0;i<bs.length;i++)pwSync(bs[i]);}
+function pwHide(id){var inp=document.getElementById(id);if(!inp||inp.type!=="text")return;inp.type="password";var b=inp.parentNode.querySelector(".pwreveal");if(b)pwSync(b);}
+document.addEventListener("mousedown",function(ev){if(ev.target.closest&&ev.target.closest(".pwreveal"))ev.preventDefault();});
+document.addEventListener("click",function(ev){var b=ev.target.closest&&ev.target.closest(".pwreveal");if(!b)return;ev.preventDefault();
+  var inp=b.parentNode.querySelector("input");if(!inp)return;var pos=inp.value.length;inp.type=inp.type==="password"?"text":"password";pwSync(b);
+  if(document.activeElement===inp){try{inp.setSelectionRange(pos,pos);}catch(e){}}});
 function applyI18n(){
   var e=document.querySelectorAll("[data-i18n]"),i;for(i=0;i<e.length;i++)e[i].textContent=t(e[i].getAttribute("data-i18n"));
   var a=document.querySelectorAll("[data-i18n-title]");for(i=0;i<a.length;i++)a[i].title=t(a[i].getAttribute("data-i18n-title"));
   var b=document.querySelectorAll("[data-i18n-ph]");for(i=0;i<b.length;i++)b[i].placeholder=t(b[i].getAttribute("data-i18n-ph"));
+  pwSyncAll();
   document.documentElement.lang=LOCALE;document.documentElement.dir=(LOCALE==="ar")?"rtl":"ltr";
 }
-function i18nRerender(){var act=document.querySelector(".nav-item.active");var v=act?act.getAttribute("data-view"):"home";el("viewTitle").textContent=viewTitle(v);document.title="mux · "+viewTitle(v);if(VIEW_LOADERS[v])VIEW_LOADERS[v]();else if(v==="chat")renderMessages();}
+function i18nRerender(){if(typeof applyAutoApproveUi==="function")applyAutoApproveUi();var act=document.querySelector(".nav-item.active");var v=act?act.getAttribute("data-view"):"home";el("viewTitle").textContent=viewTitle(v);document.title="mux · "+viewTitle(v);if(VIEW_LOADERS[v])VIEW_LOADERS[v]();else if(v==="chat")renderMessages();}
 function setLocale(l){LOCALE=I18N[l]?l:"en";try{localStorage.setItem("mux.lang",LOCALE);}catch(e){}applyI18n();i18nRerender();}
 
 var messages=[];
@@ -1059,9 +1177,9 @@ function toast(msg,isErr){var t=el("toast");t.textContent=msg;t.className="toast
 function api(path,method,body){
   var headers={"Content-Type":"application/json"};
   if(API_KEY) headers["Authorization"]="Bearer "+API_KEY;
-  return fetch(path,{method:method||"GET",headers:headers,body:body?JSON.stringify(body):undefined})
+  return fetch(BASE+path,{method:method||"GET",headers:headers,body:body?JSON.stringify(body):undefined})
     .then(function(r){return r.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(e){}
-      if(!r.ok){var m=(j&&j.Message)||(j&&j.message)||("HTTP "+r.status);throw new Error(m);}return j;});});
+      if(!r.ok){var m=(j&&j.Message)||(j&&j.message)||("HTTP "+r.status);var err=new Error(m);err.status=r.status;throw err;}return j;});});
 }
 
 /* minimal, safe markdown. Everything is escaped first; block elements (code fences, headings,
@@ -1201,7 +1319,11 @@ function copyMsg(i,btn){var m=messages[i];if(!m||!m.content)return;copyText(m.co
 
 /* ---- conversations (persisted like the desktop/TUI: list, open, new, rename, delete, export) ---- */
 function setChatTitle(x){var e=el("chatTitle");if(e)e.textContent=x||"";}
-function loadConvos(){api("/v1.0/api/sessions").then(function(r){renderConvos((r&&r.Items)||[]);}).catch(function(){renderConvos([]);});}
+// Working-directory suggestions for a new conversation (recent session folders, then home). Any existing folder
+// is accepted; an open conversation keeps the folder it started in, so the field locks while one is open.
+function loadWorkspaces(){api("/v1.0/api/workspaces").then(function(r){var dl=el("cwdList");if(!dl)return;dl.innerHTML="";((r&&r.Items)||[]).forEach(function(w){var o=document.createElement("option");o.value=w.Path||"";o.label=w.Name||"";dl.appendChild(o);});}).catch(function(){});}
+function setCwd(v,locked){var c=el("cwdInput");if(!c)return;c.value=v||"";c.disabled=!!locked;}
+function loadConvos(){loadWorkspaces();api("/v1.0/api/sessions").then(function(r){renderConvos((r&&r.Items)||[]);}).catch(function(){renderConvos([]);});}
 function highlightConvo(){Array.prototype.forEach.call(document.querySelectorAll("#convoList .convo-item"),function(row){row.classList.toggle("active",row.getAttribute("data-id")===currentSessionId);});}
 // Multi-select over the conversation list: null when off, otherwise the set of selected ids plus the last
 // clicked index (the anchor for a Shift-click range). Entered with the Select button or a Ctrl/Cmd-click.
@@ -1301,7 +1423,7 @@ function openConvo(id){
     messages=((d&&d.Messages)||[]).map(function(m){return {role:m.Role,content:m.Content,thinking:m.Reasoning||null,providerState:m.ProviderState||null,toolCalls:m.ToolCalls||null,toolCallId:m.ToolCallId||null,model:m.Model||(d&&d.Model)||"",stats:m.Stats||null,displayOnly:!!m.DisplayOnly};});
     currentSessionId=(d&&d.Id)||id;currentModel=(d&&d.Model)||"";
     if(d&&d.EndpointName){var sel=el("endpointSelect");if(sel){for(var i=0;i<sel.options.length;i++){if(sel.options[i].value===d.EndpointName){sel.selectedIndex=i;break;}}}}
-    setChatTitle((d&&d.Title)||"");renderMessages();highlightConvo();
+    setChatTitle((d&&d.Title)||"");setCwd((d&&d.WorkingDirectory)||"",true);renderMessages();highlightConvo();
     watchConvo(currentSessionId);
   }).catch(function(e){toast(e.message,true);});
 }
@@ -1316,7 +1438,7 @@ function reconnectWatch(id){ if(id===currentSessionId&&!mirrorDisabled[id]&&!con
 function watchConvo(id){
   stopConvoWatch();
   if(!id||mirrorDisabled[id]||typeof WebSocket==="undefined")return;
-  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var url=wsUrl();
   var ws;try{ws=new WebSocket(url);}catch(e){reconnectWatch(id);return;}
   convoWatch=ws;
   ws.onopen=function(){try{ws.send(JSON.stringify({action:"subscribe",sessionId:id}));}catch(e){}};
@@ -1351,7 +1473,7 @@ function reloadOpenTranscript(id){
   }
   setTimeout(pull,250);
 }
-function newChat(){stopConvoWatch();messages=[];currentSessionId=null;currentModel="";setChatTitle("");renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
+function newChat(){stopConvoWatch();messages=[];currentSessionId=null;currentModel="";setChatTitle("");setCwd("",false);renderMessages();highlightConvo();var c=el("composer");if(c)c.focus();}
 var modelSwitchSave=Promise.resolve();var deferredModelSwitchSave=false;
 function recordModelSwitch(){
   var sel=el("endpointSelect");if(!sel.value||sel.value===selectedEndpointName)return;
@@ -1391,7 +1513,7 @@ function deleteConvo(id){
 var sessionsWatch=null;
 function startSessionsWatch(){
   if(typeof WebSocket==="undefined"||sessionsWatch)return;
-  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var url=wsUrl();
   var ws;try{ws=new WebSocket(url);}catch(e){setTimeout(startSessionsWatch,3000);return;}
   sessionsWatch=ws;
   ws.onopen=function(){try{ws.send(JSON.stringify({action:"subscribe",all:true}));}catch(e){}};
@@ -1477,7 +1599,8 @@ function sendChat(){
   el("composer").value="";el("composer").style.height="44px";
   var typing={role:"assistant",content:"",typing:true};
   messages.push(typing);renderMessages();busy=true;el("sendBtn").textContent="■";el("sendBtn").title="Stop the response";el("sendBtn").style.background="#e5534b";
-  var payload={endpoint:endpoint,Id:currentSessionId||"",messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content,displayOnly:!!m.displayOnly};})};
+  var cwdEl=el("cwdInput");var cwd=(cwdEl&&!cwdEl.disabled)?cwdEl.value.trim():"";
+  var payload={endpoint:endpoint,Id:currentSessionId||"",WorkingDirectory:cwd||null,AutoApproveTools:autoApproveActive(),messages:messages.filter(function(m){return !m.typing&&!m.local;}).map(function(m){return {role:m.role,content:m.content,displayOnly:!!m.displayOnly};})};
   modelSwitchSave.then(function(){payload.Id=currentSessionId||"";streamChat(payload,typing);});
 }
 
@@ -1507,7 +1630,7 @@ function mirrorSession(text){
   if(typeof WebSocket==="undefined"){toast("This browser has no WebSocket support",true);return;}
   var id=arg||currentSessionId;
   if(!id){toast("Usage: /mirror <sessionId> (or open a conversation first)",true);return;}
-  var url=(location.protocol==="https:"?"wss":"ws")+"://"+location.host+"/v1.0/ws"+(API_KEY?("?apiKey="+encodeURIComponent(API_KEY)):"");
+  var url=wsUrl();
   var ws;try{ws=new WebSocket(url);}catch(e){toast("Could not open a mirror connection",true);return;}
   currentMirror=ws;
   var typing={role:"assistant",content:"",typing:true};
@@ -1541,7 +1664,7 @@ function streamChat(payload,typing){
   if(API_KEY) headers["Authorization"]="Bearer "+API_KEY;
   var opts={method:"POST",headers:headers,body:JSON.stringify(payload)};
   if(ac)opts.signal=ac.signal;
-  fetch("/v1.0/api/chat/stream",opts).then(function(res){
+  fetch(BASE+"/v1.0/api/chat/stream",opts).then(function(res){
     if(!res.ok||!res.body){
       return res.text().then(function(t){var j=null;try{j=t?JSON.parse(t):null;}catch(e){}throw new Error((j&&(j.Message||j.message))||("HTTP "+res.status));});
     }
@@ -1580,9 +1703,30 @@ function handleSse(block,typing){
   else if(ev==="approval"){handleApproval(parsed);}
   // The server persists the turn itself (server-authored, full-fidelity), so adopt the id it assigned and
   // refresh the list rather than PUTting the browser's flattened copy back over it.
-  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;if(parsed&&parsed.Id){currentSessionId=parsed.Id;}renderMessages();endChat();loadConvos();watchConvo(currentSessionId);}
+  else if(ev==="done"){typing.typing=false;typing.content=(parsed&&parsed.Content)||typing.content;typing.model=(parsed&&parsed.Model)||"";typing.stats=(parsed&&parsed.Stats)||null;if(typing.model)currentModel=typing.model;if(parsed&&parsed.Id){currentSessionId=parsed.Id;var ce=el("cwdInput");if(ce)ce.disabled=true;}renderMessages();endChat();loadConvos();watchConvo(currentSessionId);}
   else if(ev==="error"){typing.typing=false;typing.content="⚠️ "+parsed;renderMessages();toast(String(parsed),true);endChat();}
 }
+
+// Auto-approve tools: a per-browser choice, offered only when the hub says this caller may approve tools at all
+// (GET /v1.0/api/chat/capabilities). The hub enforces the same rule on every run, so a relayed request with
+// remote approval turned off keeps denying tools even if a client sends AutoApproveTools.
+var chatCaps={AutoApproveTools:false,Reason:""};
+var autoApproveWanted=(function(){try{return localStorage.getItem("mux.autoApproveTools")==="1";}catch(e){return false;}})();
+function autoApproveActive(){return !!(autoApproveWanted&&chatCaps.AutoApproveTools);}
+function applyAutoApproveUi(){
+  var box=el("autoApprove"),wrap=el("autoApproveWrap"),note=el("autoApproveNote");if(!box||!wrap)return;
+  var allowed=!!chatCaps.AutoApproveTools;
+  box.disabled=!allowed;box.checked=autoApproveActive();
+  wrap.classList.toggle("disabled",!allowed);wrap.classList.toggle("on",autoApproveActive());
+  var tip=allowed?t("chat.autoApprove.tip"):(chatCaps.Reason==="remote_approval_off"?t("chat.autoApprove.offRemote"):t("chat.autoApprove.offReadOnly"));
+  wrap.title=tip;box.setAttribute("aria-label",t("chat.autoApprove"));
+  if(note)note.hidden=!autoApproveActive();
+}
+function loadChatCapabilities(){
+  api("/v1.0/api/chat/capabilities").then(function(c){chatCaps=c||{AutoApproveTools:false,Reason:""};applyAutoApproveUi();})
+    .catch(function(){chatCaps={AutoApproveTools:false,Reason:""};applyAutoApproveUi();});
+}
+(function(){var b=el("autoApprove");if(b)b.addEventListener("change",function(){autoApproveWanted=el("autoApprove").checked;try{localStorage.setItem("mux.autoApproveTools",autoApproveWanted?"1":"0");}catch(e){}applyAutoApproveUi();});})();
 
 // A mutating tool was proposed during an interactive web chat (server started with --allow-tools). Ask the
 // user to approve or deny and POST the decision back so the blocked run can continue.
@@ -1640,7 +1784,7 @@ function warmModel(){
   }).catch(function(){if(st){st.textContent="✗ unreachable";st.className="model-status err";}});
 }
 
-function loadChat(){loadConvos();warmModel();startSessionsWatch();}
+function loadChat(){loadChatCapabilities();loadConvos();warmModel();startSessionsWatch();}
 
 function loadSettings(){
   api("/v1.0/api/settings").then(function(s){
@@ -1670,10 +1814,64 @@ function loadSettings(){
     el("s_rest_port").value=s.Rest.Port;
     el("s_rest_ssl").checked=s.Rest.Ssl;
     el("s_rest_corsAllowOrigin").value=s.Rest.CorsAllowOrigin;
-    el("s_rest_apiKey").value="";
+    el("s_rest_apiKey").value="";pwHide("s_rest_apiKey");
     el("apiKeyState").textContent=s.Rest.ApiKeySet?"(set — leave blank to keep)":"(not set)";
+    loadCloud();
   }).catch(function(e){toast("Failed to load settings: "+e.message,true);});
 }
+
+// Mux Cloud panel: status from the local hub, sign in (email and password are sent to Mux Cloud once; the
+// password is never stored), sign out, and the remote tool approval switch.
+function loadCloud(){
+  api("/v1.0/api/cloud/status").then(function(st){
+    // Translated label from the state key (Not signed in, Off, Connecting, Connected, Reconnecting, Signed out,
+    // Removed) and a translated sentence for a known reason code; an unknown code shows the hub's English reason.
+    var key=(st&&st.StateKey)||"not_signed_in";
+    var b=el("cloud_status");b.textContent=I18N.en["cloud.state."+key]!=null?t("cloud.state."+key):((st&&st.StateLabel)||key);
+    b.className="badge status"+(key==="connected"?" ok":(key==="connecting"||key==="reconnecting")?" warn":(key==="signed_out"||key==="removed")?" err":"");
+    var code=(st&&st.ReasonCode)||"";
+    var reason=(key==="not_signed_in"&&(!code||code==="not_signed_in"))?"":(code&&I18N.en["cloud.reason."+code]!=null?t("cloud.reason."+code):((st&&st.Reason)||""));
+    if(key==="connected"&&st.MachineName)reason=st.MachineName+(st.LatencyMs!=null?" · "+Math.round(st.LatencyMs)+" ms":"");
+    if(key==="reconnecting"&&st.RetryInSeconds!=null)reason+=(reason?" ":"")+"("+Math.round(st.RetryInSeconds)+" s)";
+    el("cloud_reason").textContent=reason;
+    return api("/v1.0/api/settings").then(function(s){
+      var c=(s&&s.Cloud)||{};
+      var signedIn=!!c.MachineSecretSet;
+      el("cloud_signedIn").hidden=!signedIn;el("cloud_signedOut").hidden=signedIn;
+      if(signedIn){
+        el("cloud_account").textContent=c.AccountEmail||"";
+        el("cloud_machine").textContent=(c.MachineName||"")+(c.MachineId?" ("+c.MachineId+")":"");
+        el("cloud_remoteApproval").checked=c.AllowRemoteToolApproval!==false;
+        el("cloud_open").href=c.ServerUrl||"https://app.usemux.ai";
+      }else{
+        if(!el("cloud_server").value)el("cloud_server").value=c.ServerUrl||"https://app.usemux.ai";
+        if(!el("cloud_machineName").value)el("cloud_machineName").value=c.MachineName||(st&&st.MachineName)||"";
+        if(!el("cloud_email").value)el("cloud_email").value=c.AccountEmail||"";
+        cloudSignupUpdate();
+      }
+    });
+  }).catch(function(){var b=el("cloud_status");b.textContent=t("cloud.state.unavailable");b.className="badge status err";el("cloud_reason").textContent="";});
+}
+function cloudSignupUrl(){var v=(el("cloud_server").value||"").trim()||"https://app.usemux.ai";return v.replace(/\/+$/,"")+"/signup";}
+function cloudSignupText(){return t("cloud.createAccountAt",{url:cloudSignupUrl().replace(/^[a-z]+:\/\//i,"")});}
+function cloudSignupUpdate(){var a=el("cloud_signup");if(!a)return;a.href=cloudSignupUrl();a.textContent=cloudSignupText();}
+function cloudSignIn(){
+  var email=el("cloud_email").value.trim(),pw=el("cloud_password").value;
+  if(!email||!pw){toast(t("cloud.required"),true);return;}
+  var btn=el("cloudSignInBtn");btn.disabled=true;btn.textContent=t("cloud.signingIn");
+  api("/v1.0/api/cloud/login","POST",{Email:email,Password:pw,ServerUrl:el("cloud_server").value.trim()||null,MachineName:el("cloud_machineName").value.trim()||null})
+    .then(function(){el("cloud_password").value="";pwHide("cloud_password");loadCloud();})
+    .catch(function(e){toast(t("cloud.failed")+e.message+(e.status===401?" "+t("cloud.noAccount")+" "+cloudSignupText():""),true);})
+    .finally(function(){btn.disabled=false;btn.textContent=t("cloud.signIn");});
+}
+function cloudSignOut(){
+  api("/v1.0/api/cloud/logout","POST",{}).then(function(){loadCloud();}).catch(function(e){toast(e.message,true);});
+}
+function cloudSetRemoteApproval(on){
+  api("/v1.0/api/settings").then(function(s){s.Cloud=s.Cloud||{};s.Cloud.AllowRemoteToolApproval=on;return api("/v1.0/api/settings","PUT",s);})
+    .then(function(){toast(on?"Remote tool approval on":"Remote tool approval off");}).catch(function(e){toast(e.message,true);loadCloud();});
+}
+setInterval(function(){var v=el("view-settings");if(v&&v.offsetParent!==null)loadCloud();},5000);
 
 function saveSettings(){
   var dto={
@@ -1736,7 +1934,7 @@ function iconizeRefreshButtons(){
   });
 }
 function openModal(title,bodyHtml,buttons,wide){
-  el("modalTitle").textContent=title;el("modalBody").innerHTML=bodyHtml;
+  el("modalTitle").textContent=title;el("modalBody").innerHTML=bodyHtml;pwSyncAll(el("modalBody"));
   el("modalBox").className="modal"+(wide?(wide===true?" wide":" "+wide):"");
   var foot=el("modalFoot");foot.innerHTML="";
   (buttons||[]).forEach(function(b){var btn=document.createElement("button");
@@ -1756,7 +1954,8 @@ function fieldHtml(f){
   else if(f.type==="select"){var o="";for(var i=0;i<f.options.length;i++)o+='<option>'+esc(f.options[i])+'</option>';inp='<select id="'+id+'">'+o+'</select>';}
   else if(f.type==="color")inp='<div class="colorfield"><input type="color" data-color-for="'+id+'" aria-label="'+esc(f.label)+'"><input type="text" id="'+id+'" placeholder="#rrggbb" spellcheck="false"></div>';
   else if(f.type==="multiselect"){var c="";for(var i=0;i<f.options.length;i++){var ov=f.options[i];c+='<label class="chip"><input type="checkbox" value="'+esc(ov)+'">'+esc(ov)+'</label>';}inp='<div class="chips" id="'+id+'">'+c+'</div>';tall=" tall";}
-  else{inp='<input type="'+(f.type==="password"?"password":(f.type==="number"?"number":"text"))+'" id="'+id+'"'+(f.placeholder?' placeholder="'+esc(f.placeholder)+'"':'')+(f.step?' step="'+f.step+'"':'')+(f.tip?' title="'+esc(f.tip)+'"':'')+(f.list?' list="dl_'+f.id+'"':'')+'>';
+  else{inp='<input type="'+(f.type==="password"?"password":(f.type==="number"?"number":"text"))+'" id="'+id+'"'+(f.placeholder?' placeholder="'+esc(f.placeholder)+'"':'')+(f.step?' step="'+f.step+'"':'')+(f.tip?' title="'+esc(f.tip)+'"':'')+(f.list?' list="dl_'+f.id+'"':'')+(f.type==="password"?' autocomplete="off" spellcheck="false"':'')+'>';
+    if(f.type==="password")inp=pwHtml(inp,f.reveal||"key");
     if(f.list){var dl="";for(var di=0;di<f.list.length;di++)dl+='<option value="'+esc(f.list[di])+'">';inp+='<datalist id="dl_'+f.id+'">'+dl+'</datalist>';}}
   var ttl=f.tip?' title="'+esc(f.tip)+'"':'';
   var full=f.full?" full":"";
@@ -2948,7 +3147,7 @@ function switchView(view){
   el("view-"+view).classList.add("active");
   el("viewTitle").textContent=viewTitle(view);
   document.title="mux · "+viewTitle(view);
-  el("app").classList.remove("navopen");
+  el("app").classList.remove("navopen");if(typeof navSync==="function")navSync();
   if(VIEW_LOADERS[view])VIEW_LOADERS[view]();
 }
 
@@ -2973,7 +3172,6 @@ function applyPalette(p){if(!p)return;var root=document.documentElement,native=(
   for(var i=0;i<PALETTE_VARS.length;i++)root.style.removeProperty(PALETTE_VARS[i]);
   if(!native){var css=paletteCss(p);for(var k in css)if(css[k])root.style.setProperty(k,css[k]);}
   var c=p.Colors||{};root.style.setProperty("--cursor",c.cursor||c.accent);root.style.setProperty("--selection",c.selection||c.surfaceAlt);
-  el("brandLogo").src=p.Dark?"__LOGO_DARK__":"__LOGO_LIGHT__";
   try{localStorage.setItem("mux.palette",JSON.stringify(p));localStorage.setItem("mux.theme",p.Dark?"dark":"light");}catch(e){}}
 function systemDark(){try{return window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches;}catch(e){return false;}}
 function findPalette(id){if(!PALETTES)return null;for(var i=0;i<PALETTES.Palettes.length;i++)if(PALETTES.Palettes[i].Id===id)return PALETTES.Palettes[i];return null;}
@@ -3039,7 +3237,7 @@ function importEpModels(i){var src=_ep[i];if(!src)return;toast(t("ep.importQuery
   }).catch(function(e){toast(e.message,true);});}
 // Legacy light/dark entry point, kept for callers and tests: maps onto the Mux / Mux Light palettes.
 function applyTheme(mode){var p=findPalette(mode==="dark"?"mux":"mux-light");if(p)applyPalette(p);
-  else{document.documentElement.setAttribute("data-theme",mode);el("brandLogo").src=(mode==="dark")?"__LOGO_DARK__":"__LOGO_LIGHT__";try{localStorage.setItem("mux.theme",mode);}catch(e){}}}
+  else{document.documentElement.setAttribute("data-theme",mode);try{localStorage.setItem("mux.theme",mode);}catch(e){}}}
 
 document.querySelectorAll(".nav-item").forEach(function(n){n.addEventListener("click",function(){switchView(n.dataset.view);});});
 el("themeBtn").addEventListener("click",openPalettePicker);
@@ -3081,6 +3279,11 @@ el("convoSelCancel").addEventListener("click",exitConvoSelect);
 el("refreshConvosBtn").addEventListener("click",function(){loadConvos();toast("Refreshed");});
 el("endpointSelect").addEventListener("change",recordModelSwitch);
 el("saveSettingsBtn").addEventListener("click",saveSettings);
+el("cloudSignInBtn").addEventListener("click",cloudSignIn);
+el("cloud_server").addEventListener("input",cloudSignupUpdate);
+el("cloudSignOutBtn").addEventListener("click",cloudSignOut);
+el("cloud_remoteApproval").addEventListener("change",function(){cloudSetRemoteApproval(el("cloud_remoteApproval").checked);});
+el("cloud_password").addEventListener("keydown",function(e){if(e.key==="Enter")cloudSignIn();});
 el("reloadSettingsBtn").addEventListener("click",loadSettings);
 /* modal close wiring */
 el("modalX").addEventListener("click",closeModal);
@@ -3092,8 +3295,13 @@ window.addEventListener("resize",closeMenu);
 /* retry on load-error panels */
 document.addEventListener("click",function(e){var r=e.target.closest?e.target.closest("[data-retry]"):null;if(r){var fn=_reload[r.getAttribute("data-retry")];if(fn)fn();}});
 /* copy server url + mobile drawer nav */
-on("copyUrlBtn",function(){copyText(location.host,el("copyUrlBtn"));});
-on("hamburger",function(){el("app").classList.toggle("navopen");});
+on("copyUrlBtn",function(){copyText(location.host+BASE,el("copyUrlBtn"));});
+function navNarrow(){try{return window.matchMedia("(max-width:820px)").matches;}catch(e){return false;}}
+function navSync(){var app=el("app"),b=el("hamburger"),shown=navNarrow()?app.classList.contains("navopen"):!app.classList.contains("navcollapsed");var lbl=shown?"Hide navigation":"Show navigation";b.title=lbl;b.setAttribute("aria-label",lbl);b.setAttribute("aria-expanded",shown?"true":"false");}
+on("hamburger",function(){var app=el("app");if(navNarrow()){app.classList.toggle("navopen");}else{var c=app.classList.toggle("navcollapsed");try{localStorage.setItem("mux.navCollapsed",c?"1":"0");}catch(e){}}navSync();});
+try{if(localStorage.getItem("mux.navCollapsed")==="1")el("app").classList.add("navcollapsed");}catch(e){}
+try{window.matchMedia("(max-width:820px)").addEventListener("change",navSync);}catch(e){}
+navSync();
 on("navscrim",function(){el("app").classList.remove("navopen");});
 /* focus trap inside the modal */
 document.addEventListener("keydown",function(e){
@@ -3148,7 +3356,7 @@ el("view-home").addEventListener("click",function(e){
   if(cached&&cached.Colors)applyPalette(cached);else{var legacy=null;try{legacy=localStorage.getItem("mux.theme");}catch(e){}applyTheme(legacy||"light");}
   loadPalettes().catch(function(){});
   try{window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(activePaletteId()==="system")applyPalette(resolvePalette("system"));});}catch(e){}})();
-el("serverUrl").textContent=location.host;
+el("serverUrl").textContent=location.host+BASE;
 /* i18n: apply saved locale to the static chrome, wire the language picker */
 el("langSel").value=LOCALE;
 el("langSel").addEventListener("change",function(){setLocale(el("langSel").value);});
@@ -3159,6 +3367,18 @@ loadStatus();setInterval(loadStatus,15000);
 loadEndpoints();
 loadHome();
 maybeStartWizard();
+// A link such as /dashboard?session=<id> or /dashboard#session=<id> (Mux Cloud opens a conversation this way)
+// opens that conversation in Chat. An unknown or unreadable id leaves the normal view untouched.
+function sessionFromLocation(search,hash){var m=/(?:^|[?&#])session=([^&#]+)/.exec((search||"")+"&"+(hash||""));if(!m)return null;try{return decodeURIComponent(m[1])||null;}catch(e){return null;}}
+function openSessionFromLocation(search,hash){
+  var id=sessionFromLocation(search,hash);if(!id)return Promise.resolve(false);
+  return api("/v1.0/api/sessions/detail?id="+encodeURIComponent(id)).then(function(d){
+    if(!d||!d.Id)return false;switchView("chat");openConvo(d.Id);return true;
+  }).catch(function(){return false;});
+}
+openSessionFromLocation(location.search,location.hash);
+// A link such as /dashboard#settings (the tray agent's "Connect to Mux Cloud") opens that view.
+(function(){var h=(location.hash||"").replace("#","");if(h&&h.indexOf("=")<0&&document.querySelector('.nav-item[data-view="'+h.replace(/[^a-z-]/g,"")+'"]'))switchView(h.replace(/[^a-z-]/g,""));})();
 </script>
 </body>
 </html>

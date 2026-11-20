@@ -28,9 +28,9 @@ namespace Mux.Desktop.Views
         private readonly TextBox _Url = new TextBox();
         private readonly TextBox _McpPath = new TextBox();
         private readonly ComboBox _AuthType = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        private readonly TextBox _BearerToken = new TextBox { PasswordChar = '●' };
+        private readonly TextBox _BearerToken = PasswordReveal.Attach(new TextBox { PasswordChar = '●' }, AppTheme.Current, isKey: true);
         private readonly TextBox _ApiKeyHeader = new TextBox();
-        private readonly TextBox _ApiKeyValue = new TextBox { PasswordChar = '●' };
+        private readonly TextBox _ApiKeyValue = PasswordReveal.Attach(new TextBox { PasswordChar = '●' }, AppTheme.Current, isKey: true);
         private readonly TextBlock _Error = new TextBlock { Foreground = new SolidColorBrush(Color.Parse("#cf222e")), FontSize = 12, TextWrapping = TextWrapping.Wrap };
 
         /// <summary>

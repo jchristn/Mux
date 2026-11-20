@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo-grey.png" width="360" alt="mux">
+  <img src="assets/logo-green.png" width="360" alt="mux">
 </p>
 
 <p align="center">
@@ -9,26 +9,26 @@
 <p align="center">
   <a href="LICENSE.md"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT License"></a>
   <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-8.0%20%7C%2010.0-purple.svg" alt=".NET 8 / 10"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-1.8.0-blue.svg" alt="v1.8.0"></a>
-  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/status-beta-yellow.svg" alt="beta"></a>
+  <a href="CHANGELOG.md"><img src="https://img.shields.io/badge/version-2.0.0-blue.svg" alt="v2.0.0"></a>
   <a href="https://github.com/jchristn/Mux/actions/workflows/ci.yml"><img src="https://github.com/jchristn/Mux/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.nuget.org/packages/Mux.Core"><img src="https://img.shields.io/nuget/v/Mux.Core.svg" alt="NuGet Mux.Core"></a>
 </p>
 
-> **Beta software**
-> mux is in beta. APIs, interfaces, configuration formats, tool schemas, and CLI behavior are all subject to change. Feedback is welcome via [issues](https://github.com/jchristn/Mux/issues) and [discussions](https://github.com/jchristn/Mux/discussions).
-
 [Get started](#getting-started) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
 
-Version 1.8.0 moves the `openai` adapter to OpenAI's Responses API on PolyPrompt 4.0, so every current
+Version 2.0.0 adds [Mux Cloud](https://app.usemux.ai): sign a machine in with `mux cloud login` (or from the
+desktop app, dashboard, VS Code, or the tray menu) and use it from any browser or the Mux mobile app as if you
+were at it.
+
+Version 1.8.0 moved the `openai` adapter to OpenAI's Responses API on PolyPrompt 4.0, so every current
 OpenAI model works, including the codex-tuned coding models, and reasoning models keep their reasoning
-across tool calls and resumed sessions. Model listing now covers OpenAI, Anthropic, Gemini, Bedrock, and
+across tool calls and resumed sessions. Model listing covers OpenAI, Anthropic, Gemini, Bedrock, and
 Azure OpenAI, keyed adapters fall back to their standard API-key environment variables, reasoning effort
 gains `none`, `xhigh`, and `max`, and the usage views show the effort actually sent. Credentials are API
 keys only. See [model providers](docs/PROVIDERS.md) for the one change to check: an `openai` endpoint
 pointed at a Chat Completions gateway should use `openai-compatible`.
-It also adds fourteen color palettes, plus your own, shared by the terminal, desktop app, web dashboard, and VS
-Code, along with a blinking caret in the palette's cursor color. The terminal endpoint editor now covers all 11
+It also added fourteen color palettes, plus your own, shared by the terminal, desktop app, web dashboard, and VS
+Code, along with a blinking caret in the palette's cursor color. The terminal endpoint editor covers all 11
 adapters, and models can be imported from any endpoint on every surface. See
 [color palettes](docs/CONFIG.md#color-palettes).
 
@@ -127,6 +127,45 @@ Every surface — the terminal UI, the web dashboard, the desktop app, and the V
 same `mux` engine and the same configuration under `~/.mux`. Install the CLI once and all four surfaces share
 your endpoints, sessions, and settings. Pick the surface (or surfaces) you want below; they are not mutually
 exclusive, and a conversation started in one resumes in another.
+
+### Download an installer
+
+Installers for macOS, Windows, and Linux are on the
+[latest release](https://github.com/jchristn/Mux/releases/latest). They are self-contained, so no .NET SDK is needed.
+Each one installs the desktop app, the `mux` command, and the tray agent, which starts when you log in.
+
+| OS | Download | Notes |
+| --- | --- | --- |
+| macOS (Apple silicon or Intel) | `mux-<version>-osx-arm64.pkg` or `-osx-x64.pkg` (recommended) | Installs mux, adds `mux` to your PATH, and starts the tray agent. A `.dmg` is also available for drag-and-drop installs. |
+| Windows (x64 or arm64) | `mux-<version>-win-x64-setup.exe` or `-win-arm64-setup.exe` | Adds `mux` to your PATH |
+| Linux (x64 or arm64) | `.deb`, `.rpm`, or `.AppImage` | `sudo apt install ./mux_<version>_amd64.deb`, `sudo dnf install ./mux-<version>-1.x86_64.rpm`, or `chmod +x` the AppImage |
+| CLI only, any OS | `mux-<version>-<rid>.tar.gz` / `.zip`, or `Mux.Cli.<version>.nupkg` | Unpack and put `mux` on your `PATH` |
+
+Every release has one `SHA256SUMS` file covering every download. [INSTALL.md](INSTALL.md) has the full steps,
+uninstalling, and checksum verification.
+
+> [!IMPORTANT]
+> **These builds are not code-signed, so Windows and macOS block the first launch.** This is expected and does not
+> mean the download is damaged. mux is free, open-source software, and signing certificates are an ongoing cost we
+> choose not to pass on. To confirm a file is the one published, check it against `SHA256SUMS`.
+
+- **macOS:** macOS shows *"mux" Not Opened. Apple could not verify "mux" is free of malware that may harm your Mac or
+  compromise your privacy.* with **Move to Trash** and **Done** buttons. To open it anyway:
+  1. Click **Done**. Do not click Move to Trash.
+  2. Open **System Settings > Privacy & Security** and scroll down to **Security**.
+  3. Next to *"mux" was blocked to protect your Mac*, click **Open Anyway**. The button only appears for about an
+     hour after the blocked attempt; if it is missing, try to open mux again first.
+  4. Click **Open Anyway** again in the dialog that follows and enter your password. You only do this once.
+
+  Or skip the prompt in Terminal: `xattr -dr com.apple.quarantine ~/Downloads/mux-<version>-osx-arm64.pkg` before
+  opening the `.pkg`, or `xattr -dr com.apple.quarantine /Applications/mux.app` after copying the app from the
+  `.dmg`. On macOS 15 and later, Control-click > **Open** no longer bypasses this prompt.
+- **Windows:** "Windows protected your PC": click **More info**, then **Run anyway**. If your browser warns that the
+  file *isn't commonly downloaded*, choose **Keep**. For a `.zip`, run `Unblock-File` on it (or right-click >
+  Properties > Unblock) before extracting.
+- **Linux:** no prompt. Make an AppImage executable with `chmod +x` before running it.
+
+To build from source instead, follow the steps below.
 
 ### Prerequisites
 
@@ -265,11 +304,11 @@ To pin a released version without building, download the self-contained CLI arch
 .NET runtime:
 
 ```bash
-curl -fsSL https://github.com/jchristn/mux/releases/download/v1.5.0/mux-1.5.0-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
+curl -fsSL https://github.com/jchristn/mux/releases/download/v2.0.0/mux-2.0.0-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
 ```
 
 Archives are `mux-<version>-<rid>.tar.gz` for `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`, and
-`mux-<version>-win-x64.zip` for Windows. Each release also lists their SHA-256 sums in `SHA256SUMS-*.txt`.
+`mux-<version>-win-x64.zip` and `-win-arm64.zip` for Windows. Each release lists every file's SHA-256 in `SHA256SUMS`.
 
 On first run mux seeds `~/.mux/endpoints.json` (a default local Ollama endpoint) and `~/.mux/settings.json`.
 Set `MUX_CONFIG_DIR` before first launch if you want an isolated config directory. The full walkthrough is in
@@ -359,6 +398,26 @@ composer completes slash commands, and endpoint selections leave saved model-swi
 render when opening conversations from other clients. Source lives
 in `src/Mux.VSCode`; the full guide is in [docs/VSCODE.md](docs/VSCODE.md).
 
+### Mux Cloud
+
+[Mux Cloud](https://github.com/jchristn/MuxCloud) (hosted at [app.usemux.ai](https://app.usemux.ai)) lets you use
+this machine from a browser on another computer or from your phone, exactly as if you were sitting at it: the same
+dashboard, conversations, tool approvals, and settings. Sign in once:
+
+```text
+mux cloud login          Sign this machine in (email and password; the password is never stored)
+mux cloud status         Show the connection (Not signed in, Off, Connected, Reconnecting, Signed out, ...)
+mux cloud remote-approval off   Refuse tool approvals that come through Mux Cloud
+mux cloud logout         Sign this machine out
+```
+
+The same controls are in the terminal UI (`/cloud`), the desktop app (Mux Cloud window), the dashboard (Settings,
+Mux Cloud), VS Code (`mux: Connect to Mux Cloud`), and the tray agent's menu. The tray agent keeps one outbound
+WebSocket open to Mux Cloud, so the machine needs no inbound port. Conversations stay on the machine; Mux Cloud passes
+them through. Anyone signed in to your account can operate the machine remotely, including approving tools, unless
+you turn remote tool approval off. See [docs/CONFIG.md](docs/CONFIG.md#mux-cloud-settingsjson-cloud) and
+[WEBSOCKETS_API.md](WEBSOCKETS_API.md).
+
 ## Model providers
 
 Choose a provider, configure a named endpoint, and select it in the surface you use.
@@ -400,6 +459,7 @@ echo "prompt" | mux --print          Read prompt from stdin
 mux probe [OPTIONS]                  Validate config and backend access
 mux endpoint <subcommand> [OPTIONS]  Inspect configured endpoints
 mux serve [OPTIONS]                   Start the local REST/WebSocket API + web dashboard (opt-in)
+mux cloud <login|logout|status>      Connect this machine to Mux Cloud (use it from a browser or phone)
 ```
 
 Use `mux print` as the preferred non-interactive entrypoint in scripts and automation. `--print` remains supported and is convenient for stdin piping. Use `mux endpoint list`/`ls`/`show` when automation needs to inspect stored endpoint configuration without entering the REPL. Use `mux serve` to bring up the token-guarded local REST API and web dashboard (see `docs/REST_API.md`).
@@ -913,6 +973,7 @@ See [CONFIG.md](docs/CONFIG.md) for the full reference.
 - [Desktop app](docs/DESKTOP.md)
 - [VS Code extension](docs/VSCODE.md)
 - [REST API](docs/REST_API.md)
+- [WebSockets API](WEBSOCKETS_API.md), including the Mux Cloud tunnel
 - [Observability](TELEMETRY.md): OpenTelemetry metrics, traces, logs, dashboards, and alerts
 - [Authoring skills](docs/SKILLS_AUTHORING.md)
 - [Testing](docs/TESTING.md)

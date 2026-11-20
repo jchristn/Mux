@@ -1,5 +1,5 @@
 @echo off
-REM Deregister the mux agent from starting at login (deletes the MuxAgent value from the current
+REM Deregister the mux agent from starting at login (deletes the "Mux Agent" value from the current
 REM user's Run registry key). A running agent keeps running; exit it from the tray menu or run
 REM scripts\windows\kill-mux.bat. The installed agent (%LOCALAPPDATA%\Programs\Mux\Agent) stays in
 REM place; remove-tool.bat removes it.
@@ -16,12 +16,14 @@ if not defined MUX_CONFIG_HOME set "MUX_CONFIG_HOME=%USERPROFILE%\.mux"
 if not exist "%MUX_CONFIG_HOME%" mkdir "%MUX_CONFIG_HOME%"
 if not exist "%MUX_CONFIG_HOME%\startup-registered" echo registered by scripts\windows> "%MUX_CONFIG_HOME%\startup-registered"
 
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v MuxAgent >nul 2>&1
+REM mux 1.x used the value name MuxAgent; remove it too.
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v MuxAgent /f >nul 2>&1
+reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "Mux Agent" >nul 2>&1
 if errorlevel 1 (
     echo The agent is not registered to run at login; nothing to do.
     exit /b 0
 )
-reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v MuxAgent /f >nul
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "Mux Agent" /f >nul
 if errorlevel 1 (
     echo Error: Failed to delete the Run registry value. 1>&2
     exit /b 1

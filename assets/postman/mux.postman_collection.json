@@ -56,6 +56,18 @@
 			"value": "",
 			"type": "string",
 			"description": "Optional working directory for project-scoped routes (skills expand, context instructions). Blank uses the server's current directory."
+		},
+		{
+			"key": "cloudEmail",
+			"value": "you@example.com",
+			"type": "string",
+			"description": "Mux Cloud account email"
+		},
+		{
+			"key": "cloudPassword",
+			"value": "",
+			"type": "string",
+			"description": "Mux Cloud account password (never stored by mux)"
 		}
 	],
 	"item": [
@@ -555,6 +567,26 @@
 							"raw": "{\n  \"items\": []\n}"
 						},
 						"description": "Replaces the keybinding overrides."
+					}
+				},
+				{
+					"name": "List bindable commands",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/keybindings/commands",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"keybindings",
+								"commands"
+							]
+						},
+						"description": "Every bindable command with `DefaultChord`, `EffectiveChord`, and `Overridden`."
 					}
 				}
 			]
@@ -1238,6 +1270,55 @@
 						},
 						"description": "Deletes a session by id."
 					}
+				},
+				{
+					"name": "Suggest working directories",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/workspaces",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"workspaces"
+							]
+						},
+						"description": "Working-directory suggestions for a new conversation: folders recent sessions ran in (most recent first), then the home directory. Any existing folder may be passed as WorkingDirectory to POST /v1.0/api/chat/stream."
+					}
+				},
+				{
+					"name": "Compact a session",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/sessions/:id/compact",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"sessions",
+								":id",
+								"compact"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Endpoint\": \"{{endpointName}}\"\n}"
+						},
+						"description": "Summarizes the older turns of a saved conversation and saves the shorter history. Returns `{ Compacted, Message, Endpoint, MessagesBefore, MessagesAfter, EstimatedTokensBefore, EstimatedTokensAfter, ContextWindow }`."
+					}
 				}
 			]
 		},
@@ -1271,6 +1352,35 @@
 							"raw": "{\n  \"endpoint\": \"{{endpointName}}\",\n  \"messages\": [\n    { \"role\": \"user\", \"content\": \"Say hello in one word.\" }\n  ]\n}"
 						},
 						"description": "Streams the completion server-side and returns the buffered result plus timing: `{ role, content, endpoint, model, stats: { ttftMs, streamingMs, totalMs, inputTokens, outputTokens, totalTokens } }`. This call is also recorded to usage telemetry (call kind `chat`)."
+					}
+				},
+				{
+					"name": "Answer an ask_user question",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/chat/answer",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"chat",
+								"answer"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"RunId\": \"<run id>\",\n  \"QuestionId\": \"<question id>\",\n  \"Answers\": [\"Postgres\"],\n  \"Other\": null,\n  \"Skip\": false\n}"
+						},
+						"description": "Answers an `ask_user` event from a streaming run. `Answers` are choice labels, `Other` is free text, `Skip` skips. Returns `{ ok: true }`; 404 when no question is pending."
 					}
 				}
 			]
@@ -1894,6 +2004,331 @@
 							]
 						},
 						"description": "Cooperatively cancel a run: trips its cancellation token and publishes a terminal `run_completed` (status `canceled`) to stream subscribers. `200` `{ Ok, RunId, Status }` on success; `404` when the run is unknown or already finished."
+					}
+				}
+			]
+		},
+		{
+			"name": "Mux Cloud",
+			"description": "Connect this machine to Mux Cloud (https://app.usemux.ai) so the cloud dashboard and mobile app can use it from anywhere. The password is sent to Mux Cloud once and never stored. Anyone signed in to the account can operate this machine remotely, including approving tools unless cloud.allowRemoteToolApproval is false.",
+			"item": [
+				{
+					"name": "Mux Cloud status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/cloud/status",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"cloud",
+								"status"
+							]
+						},
+						"description": "The tunnel status: StateName is Disabled, Connecting, Connected, Reconnecting, SignedOut, or Revoked, with the reason, server, machine, account, and whether remote tool approval is allowed."
+					}
+				},
+				{
+					"name": "Sign in to Mux Cloud",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/cloud/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"cloud",
+								"login"
+							]
+						},
+						"description": "Exchanges a Mux Cloud email and password for a machine credential, saves it in settings.json under cloud, and connects. 401 for wrong credentials, 502 when Mux Cloud is unreachable.",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Email\": \"{{cloudEmail}}\",\n  \"Password\": \"{{cloudPassword}}\",\n  \"ServerUrl\": null,\n  \"MachineName\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				},
+				{
+					"name": "Sign out of Mux Cloud",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/cloud/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"cloud",
+								"logout"
+							]
+						},
+						"description": "Deletes the machine credential, turns the connection off, and closes the tunnel.",
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Processes",
+			"item": [
+				{
+					"name": "List background processes",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/processes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"processes"
+							]
+						},
+						"description": "The background processes the model started with `process_start`."
+					}
+				},
+				{
+					"name": "Process output",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/processes/:id/output?chars=4000",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"processes",
+								":id",
+								"output"
+							],
+							"query": [
+								{
+									"key": "chars",
+									"value": "4000"
+								}
+							]
+						},
+						"description": "Recent output `{ Id, Command, Text, Running, ExitCode }`."
+					}
+				},
+				{
+					"name": "Stop a process",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/processes/:id/stop",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"processes",
+								":id",
+								"stop"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": ""
+						},
+						"description": "Stops a process; the id `all` stops every running process."
+					}
+				},
+				{
+					"name": "Clear exited processes",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/processes",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"processes"
+							]
+						},
+						"description": "Removes exited processes: `{ Removed }`."
+					}
+				}
+			]
+		},
+		{
+			"name": "Trust",
+			"item": [
+				{
+					"name": "Read project trust",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/trust?workingDirectory={{workingDirectory}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"trust"
+							],
+							"query": [
+								{
+									"key": "workingDirectory",
+									"value": "{{workingDirectory}}"
+								}
+							]
+						},
+						"description": "`{ WorkingDirectory, ProjectRoot, Level }`."
+					}
+				},
+				{
+					"name": "Set project trust",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/trust",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"trust"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"WorkingDirectory\": \"{{workingDirectory}}\",\n  \"Level\": \"playbooks\"\n}"
+						},
+						"description": "Level `all`, `playbooks`, `ignore`, or `reset`."
+					}
+				}
+			]
+		},
+		{
+			"name": "Web Search",
+			"item": [
+				{
+					"name": "Read search settings",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/search",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"search"
+							]
+						},
+						"description": "Search settings and providers; API keys are never returned (`ApiKeySet`)."
+					}
+				},
+				{
+					"name": "Replace search settings",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/search",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"search"
+							]
+						},
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Enabled\": true,\n  \"AllowFallback\": true,\n  \"Providers\": [\n    { \"Name\": \"tavily\", \"ProviderType\": \"tavily\", \"ApiKey\": \"\", \"Enabled\": true, \"IsDefault\": true }\n  ]\n}"
+						},
+						"description": "Providers left out are removed; a blank `ApiKey` keeps the stored key."
+					}
+				},
+				{
+					"name": "Delete a search provider",
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/v1.0/api/search/providers/:name",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"v1.0",
+								"api",
+								"search",
+								"providers",
+								":name"
+							]
+						},
+						"description": "Removes the named provider."
 					}
 				}
 			]

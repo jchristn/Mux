@@ -1,4 +1,4 @@
-namespace Mux.Desktop.Services
+namespace Mux.Core.Keybindings
 {
     /// <summary>
     /// A single bindable command in the shared keybinding catalog: its stable id (the key written into

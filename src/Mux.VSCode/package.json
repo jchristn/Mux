@@ -344,6 +344,12 @@
         "category": "mux"
       },
       {
+        "command": "mux.cloud",
+        "title": "%cmd.cloud%",
+        "category": "mux",
+        "icon": "$(cloud)"
+      },
+      {
         "command": "mux.about",
         "title": "%cmd.about%",
         "category": "mux",

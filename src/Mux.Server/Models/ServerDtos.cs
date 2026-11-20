@@ -84,6 +84,9 @@ namespace Mux.Server.Models
         /// <summary>Number of messages in the session's focused conversation.</summary>
         public int MessageCount { get; set; } = 0;
 
+        /// <summary>The working directory the session's tools run in (empty when none was recorded).</summary>
+        public string WorkingDirectory { get; set; } = string.Empty;
+
         /// <summary>The session's freeform labels.</summary>
         public List<string> Labels { get; set; } = new List<string>();
 

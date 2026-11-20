@@ -56,7 +56,7 @@ else
 fi
 echo "[3/3] Removing the desktop app and tray agent..."
 linux_remove_apps
-if [ -f "$HOME/.config/systemd/user/mux-agent.service" ] || [ -f "$HOME/.config/autostart/mux-agent.desktop" ]; then
+if [ -f "$HOME/.config/systemd/user/ai.latticetech.mux.agent.service" ] || [ -f "$HOME/.config/autostart/ai.latticetech.mux.agent.desktop" ] || [ -f "$HOME/.config/systemd/user/mux-agent.service" ] || [ -f "$HOME/.config/autostart/mux-agent.desktop" ]; then
     echo "Note: the agent is still registered to start at login. Run scripts/linux/remove-from-startup.sh to remove that."
 fi
 echo "Done."

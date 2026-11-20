@@ -9,6 +9,7 @@ import { PaletteDto, PaletteListDto } from '../theme/palette';
 import { ApiError } from './ApiError';
 import { drainBuffer } from './streaming';
 import {
+    CloudStatus,
     FileCompletion,
     ChatStreamRequest,
     CheckpointActionResult,
@@ -314,6 +315,23 @@ export class ApiClient {
     /** Deletes a skill by id. */
     public async deleteSkill(id: string, signal?: AbortSignal): Promise<void> {
         await this.send('DELETE', `/v1.0/api/skills?id=${encodeURIComponent(id)}`, undefined, signal);
+    }
+
+    /** Reads this machine's Mux Cloud connection status. */
+    public getCloudStatus(signal?: AbortSignal): Promise<CloudStatus> {
+        return this.getJson<CloudStatus>('/v1.0/api/cloud/status', signal);
+    }
+
+    /**
+     * Signs this machine in to Mux Cloud. The password is sent to Mux Cloud once by the local hub and never stored.
+     */
+    public cloudLogin(email: string, password: string, serverUrl?: string, machineName?: string, signal?: AbortSignal): Promise<CloudStatus> {
+        return this.sendJson<CloudStatus>('POST', '/v1.0/api/cloud/login', { Email: email, Password: password, ServerUrl: serverUrl || null, MachineName: machineName || null }, signal);
+    }
+
+    /** Signs this machine out of Mux Cloud and deletes its credential. */
+    public cloudLogout(signal?: AbortSignal): Promise<CloudStatus> {
+        return this.sendJson<CloudStatus>('POST', '/v1.0/api/cloud/logout', {}, signal);
     }
 
     /** Reads the editable settings (secrets masked). */

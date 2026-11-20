@@ -17,6 +17,7 @@ namespace Mux.Agent
     public sealed class AgentHost
     {
         private MuxServer? _Server;
+        private Mux.Server.Cloud.CloudTunnelHost? _Cloud;
         private Mux.Core.Telemetry.UsageTelemetry? _Telemetry;
 
         /// <summary>
@@ -61,6 +62,16 @@ namespace Mux.Agent
         /// </summary>
         public void LaunchDashboard()
         {
+            LaunchDashboard(string.Empty);
+        }
+
+        /// <summary>
+        /// Ensures the server is serving and opens the web dashboard at a fragment (for example <c>#settings</c>).
+        /// Best-effort; never throws.
+        /// </summary>
+        /// <param name="fragment">A fragment naming a dashboard view, or empty for the home view.</param>
+        public void LaunchDashboard(string fragment)
+        {
             EnsureStarted();
 
             // Prefer the URL this agent bound. If binding failed because another process (a standalone
@@ -69,7 +80,7 @@ namespace Mux.Agent
             string url = !string.IsNullOrEmpty(BaseUrl) ? BaseUrl : ConfiguredBaseUrl();
             if (!string.IsNullOrEmpty(url))
             {
-                OpenUrl(url.TrimEnd('/') + "/dashboard");
+                OpenUrl(url.TrimEnd('/') + "/dashboard" + (fragment ?? string.Empty));
             }
         }
 
@@ -165,7 +176,24 @@ namespace Mux.Agent
 
             _Server.Start();
             BaseUrl = _Server.BaseUrl;
+
+            // The agent owns the hub port, so it runs this machine's Mux Cloud tunnel. The host watches settings.json,
+            // so signing in or out from any surface takes effect without restarting the agent.
+            try
+            {
+                _Cloud = new Mux.Server.Cloud.CloudTunnelHost(_Server, Defaults.ProductVersion);
+                _Cloud.Start();
+            }
+            catch (Exception)
+            {
+                _Cloud = null;
+            }
         }
+
+        /// <summary>
+        /// The Mux Cloud tunnel host, or null when the server is not running.
+        /// </summary>
+        public Mux.Server.Cloud.CloudTunnelHost? Cloud => _Cloud;
 
         /// <summary>
         /// Launch the interactive mux terminal UI (the TUI) in a new terminal window. Best-effort; never throws. The
@@ -270,6 +298,16 @@ namespace Mux.Agent
         /// </summary>
         public void Stop()
         {
+            try
+            {
+                _Cloud?.Dispose();
+            }
+            catch (Exception)
+            {
+                // Best-effort shutdown.
+            }
+            _Cloud = null;
+
             try
             {
                 _Server?.Stop();

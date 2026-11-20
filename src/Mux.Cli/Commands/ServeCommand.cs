@@ -121,6 +121,10 @@ namespace Mux.Cli.Commands
                 return 1;
             }
 
+            // This process owns the hub port, so it runs the Mux Cloud tunnel when the machine is signed in.
+            using Mux.Server.Cloud.CloudTunnelHost cloud = new Mux.Server.Cloud.CloudTunnelHost(server, Defaults.ProductVersion);
+            cloud.Start();
+
             IReadOnlyList<string> wordmark = Console.IsOutputRedirected
                 ? MuxBanner.WordmarkLines()
                 : MuxBanner.ScrollbackLines(Mux.Core.Branding.BlockArt.TerminalMode());
@@ -153,9 +157,13 @@ namespace Mux.Cli.Commands
                     Console.WriteLine(valueIndent + "metrics at " + observability.PrometheusScrapeUrl);
                 }
             }
-            Console.WriteLine("  " + "tools".PadRight(labelWidth) + " : " + (allowTools
-                ? "interactive (mutating tools prompt the browser for approval)"
-                : "read-only (mutating tools denied; enable with --allow-tools)"));
+            Console.WriteLine("  " + "cloud".PadRight(labelWidth) + " : " + cloud.Status.Describe());
+            bool cloudApprovals = settings.Cloud.IsEnrolled && settings.Cloud.Enabled && settings.Cloud.AllowRemoteToolApproval;
+            string toolsLine;
+            if (allowTools) toolsLine = "interactive (mutating tools prompt the browser for approval)";
+            else if (cloudApprovals) toolsLine = "interactive while connected to Mux Cloud (mutating tools prompt for approval); read-only otherwise";
+            else toolsLine = "read-only (mutating tools denied; enable with --allow-tools)";
+            Console.WriteLine("  " + "tools".PadRight(labelWidth) + " : " + toolsLine);
             Console.WriteLine();
             Console.WriteLine("Press Ctrl+C to stop.");
             Console.WriteLine();

@@ -255,6 +255,31 @@ namespace Mux.Server.Routes
                 return await Task.FromResult<object>(new ListResponse<KeybindingDto>(items)).ConfigureAwait(false);
             }, Documentation.ApiDoc.KeybindingsGet);
 
+            // Every bindable command with its default and effective chord, so a client can list commands that have no
+            // override, show defaults, unbind, and reset (an override equal to the default is dropped on save).
+            app.Get("/v1.0/api/keybindings/commands", async (req) =>
+            {
+                if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();
+                IReadOnlyDictionary<string, string?> overrides = SettingsLoader.LoadKeybindings();
+                List<KeybindingCommandDto> items = new List<KeybindingCommandDto>();
+                foreach (Mux.Core.Keybindings.KeybindingCommand command in Mux.Core.Keybindings.KeybindingCatalog.Commands)
+                {
+                    bool overridden = overrides.TryGetValue(command.Id, out string? chord);
+                    items.Add(new KeybindingCommandDto
+                    {
+                        CommandId = command.Id,
+                        Title = command.Title,
+                        Category = command.Category,
+                        DefaultChord = command.DefaultChord,
+                        EffectiveChord = overridden ? chord : command.DefaultChord,
+                        Overridden = overridden
+                    });
+                }
+
+                req.Http.Response.StatusCode = 200;
+                return await Task.FromResult<object>(new ListResponse<KeybindingCommandDto>(items)).ConfigureAwait(false);
+            }, Documentation.ApiDoc.KeybindingCommandsGet);
+
             app.Put("/v1.0/api/keybindings", async (req) =>
             {
                 if (!ApiAuth.Authorize(req.Http, _ApiKey)) return Unauthorized();

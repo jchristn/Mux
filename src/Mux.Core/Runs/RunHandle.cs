@@ -8,6 +8,7 @@ namespace Mux.Core.Runs
     using System.Threading.Channels;
     using System.Threading.Tasks;
     using Mux.Core.Agent;
+    using Mux.Core.Interaction;
     using Mux.Core.Tasks;
 
     /// <summary>
@@ -27,12 +28,20 @@ namespace Mux.Core.Runs
     {
         #region Private-Members
 
+        private static readonly JsonSerializerOptions _FrameJsonOptions = new JsonSerializerOptions
+        {
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        };
+
         private readonly string _RunId;
         private readonly string _SessionId;
         private readonly CancellationTokenSource _LinkedCts;
         private readonly object _Sync = new object();
         private readonly List<string> _Ring = new List<string>();
         private readonly List<Channel<string>> _Subscribers = new List<Channel<string>>();
+        private readonly ConcurrentDictionary<string, TaskCompletionSource<AskUserResponse>> _Questions =
+            new ConcurrentDictionary<string, TaskCompletionSource<AskUserResponse>>(StringComparer.Ordinal);
         private readonly ConcurrentDictionary<string, TaskCompletionSource<string>> _Approvals =
             new ConcurrentDictionary<string, TaskCompletionSource<string>>();
 
@@ -70,6 +79,12 @@ namespace Mux.Core.Runs
         /// </summary>
         public event Action? Completed;
 
+        /// <summary>
+        /// Raised when the run starts waiting on a tool-call approval, with the tool call id and tool name.
+        /// The Mux Cloud tunnel uses it to push an approval notification. Handlers must not throw.
+        /// </summary>
+        public event Action<RunHandle, string, string>? ApprovalRequested;
+
         #endregion
 
         #region Public-Members
@@ -93,6 +108,12 @@ namespace Mux.Core.Runs
             get => _Model;
             set => _Model = value ?? string.Empty;
         }
+
+        /// <summary>Number of tool-call approvals the run is currently waiting on.</summary>
+        public int PendingApprovalCount => _Approvals.Count;
+
+        /// <summary>The number of <c>ask_user</c> questions waiting for an answer.</summary>
+        public int PendingQuestionCount => _Questions.Count;
 
         /// <summary>The current lifecycle status.</summary>
         public RunStatusEnum Status
@@ -239,11 +260,29 @@ namespace Mux.Core.Runs
         /// <exception cref="ArgumentException">Thrown when <paramref name="toolCallId"/> is null or empty.</exception>
         public TaskCompletionSource<string> RegisterApproval(string toolCallId)
         {
+            return RegisterApproval(toolCallId, string.Empty, string.Empty, 0);
+        }
+
+        /// <summary>
+        /// Registers a pending approval for a tool call, fans an <c>approval_requested</c> frame out to every
+        /// subscriber (and into the replay ring, so a client that subscribes while the run waits still sees the
+        /// prompt), and returns the completion source the run awaits.
+        /// </summary>
+        /// <param name="toolCallId">The proposed tool call id. Must not be null or empty.</param>
+        /// <param name="toolName">The tool name, for display.</param>
+        /// <param name="arguments">The tool call arguments (raw JSON text), for display.</param>
+        /// <param name="toolAutoApproveSeconds">The client-side auto-approve countdown in seconds (0 for none).</param>
+        /// <returns>A completion source resolved by <see cref="ResolveApproval"/> with the decision.</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="toolCallId"/> is null or empty.</exception>
+        public TaskCompletionSource<string> RegisterApproval(string toolCallId, string toolName, string arguments, int toolAutoApproveSeconds)
+        {
             if (string.IsNullOrEmpty(toolCallId)) throw new ArgumentException("Tool call id is required.", nameof(toolCallId));
 
             TaskCompletionSource<string> source = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
             _Approvals[toolCallId] = source;
             Status = RunStatusEnum.AwaitingApproval;
+            FanOut(BuildApprovalFrame("approval_requested", toolCallId, toolName, arguments, toolAutoApproveSeconds, null), false);
+            RaiseApprovalRequested(toolCallId, toolName);
             return source;
         }
 
@@ -259,8 +298,79 @@ namespace Mux.Core.Runs
 
             if (_Approvals.TryRemove(toolCallId, out TaskCompletionSource<string>? source))
             {
-                Status = RunStatusEnum.Running;
-                return source.TrySetResult(decision ?? "n");
+                string verdict = decision ?? "n";
+                if (_Approvals.IsEmpty && _Questions.IsEmpty)
+                {
+                    Status = RunStatusEnum.Running;
+                }
+
+                bool resolved = source.TrySetResult(verdict);
+                if (resolved)
+                {
+                    FanOut(BuildApprovalFrame("approval_resolved", toolCallId, null, null, 0, verdict), false);
+                }
+
+                return resolved;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Registers a pending <c>ask_user</c> question, fans an <c>ask_user</c> frame out to every subscriber (and into
+        /// the replay ring, so a client that subscribes while the run waits still sees it), raises
+        /// <see cref="ApprovalRequested"/> with the tool name <c>ask_user</c> so push notifications fire, and returns
+        /// the completion source the run awaits. The run's status reads <see cref="RunStatusEnum.AwaitingApproval"/>
+        /// while any question or approval is pending.
+        /// </summary>
+        /// <param name="questionId">A unique id for the question. Must not be null or empty.</param>
+        /// <param name="request">The question and its options. Must not be null.</param>
+        /// <param name="timeoutSeconds">How long the run waits before treating the question as unanswered (0 for none), for display.</param>
+        /// <returns>A completion source resolved by <see cref="ResolveQuestion"/> with the answer.</returns>
+        /// <exception cref="ArgumentException">Thrown when <paramref name="questionId"/> is null or empty.</exception>
+        /// <exception cref="ArgumentNullException">Thrown when <paramref name="request"/> is null.</exception>
+        public TaskCompletionSource<AskUserResponse> RegisterQuestion(string questionId, AskUserRequest request, int timeoutSeconds)
+        {
+            if (string.IsNullOrEmpty(questionId)) throw new ArgumentException("Question id is required.", nameof(questionId));
+            if (request == null) throw new ArgumentNullException(nameof(request));
+
+            TaskCompletionSource<AskUserResponse> source = new TaskCompletionSource<AskUserResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _Questions[questionId] = source;
+            Status = RunStatusEnum.AwaitingApproval;
+            FanOut(BuildQuestionFrame(questionId, request, timeoutSeconds), false);
+            RaiseApprovalRequested(questionId, InteractionToolProvider.AskUserToolName);
+            return source;
+        }
+
+        /// <summary>
+        /// Resolves a pending <c>ask_user</c> question with an answer (or a dismissal) and fans an
+        /// <c>ask_user_resolved</c> frame out to subscribers.
+        /// </summary>
+        /// <param name="questionId">The question id.</param>
+        /// <param name="response">The answer. Null dismisses the question.</param>
+        /// <returns>True when a pending question was found and resolved; otherwise false.</returns>
+        public bool ResolveQuestion(string questionId, AskUserResponse? response)
+        {
+            if (string.IsNullOrEmpty(questionId)) return false;
+
+            if (_Questions.TryRemove(questionId, out TaskCompletionSource<AskUserResponse>? source))
+            {
+                AskUserResponse answer = response ?? AskUserResponse.Dismiss();
+                if (_Approvals.IsEmpty && _Questions.IsEmpty)
+                {
+                    Status = RunStatusEnum.Running;
+                }
+
+                bool resolved = source.TrySetResult(answer);
+                if (resolved)
+                {
+                    Dictionary<string, object?> payload = FrameHeader("ask_user_resolved");
+                    payload["questionId"] = questionId;
+                    payload["dismissed"] = answer.Dismissed || (answer.Selected.Count == 0 && string.IsNullOrWhiteSpace(answer.OtherText));
+                    FanOut(JsonSerializer.Serialize(payload, _FrameJsonOptions), false);
+                }
+
+                return resolved;
             }
 
             return false;
@@ -499,6 +609,62 @@ namespace Mux.Core.Runs
             {
                 RaiseCompleted();
             }
+        }
+
+        private void RaiseApprovalRequested(string toolCallId, string toolName)
+        {
+            try { ApprovalRequested?.Invoke(this, toolCallId, toolName ?? string.Empty); }
+            catch (Exception) { /* a listener must never break the run */ }
+        }
+
+        private Dictionary<string, object?> FrameHeader(string eventType)
+        {
+            return new Dictionary<string, object?>
+            {
+                ["contractVersion"] = AgentEventSerializer.ContractVersion,
+                ["eventType"] = eventType,
+                ["timestampUtc"] = DateTime.UtcNow,
+                ["runId"] = _RunId,
+                ["sessionId"] = _SessionId
+            };
+        }
+
+        private string BuildQuestionFrame(string questionId, AskUserRequest request, int timeoutSeconds)
+        {
+            Dictionary<string, object?> payload = FrameHeader("ask_user");
+            payload["questionId"] = questionId;
+            payload["question"] = request.Question;
+            List<Dictionary<string, string>> options = new List<Dictionary<string, string>>();
+            foreach (AskUserOption option in request.Options)
+            {
+                options.Add(new Dictionary<string, string> { ["label"] = option.Label, ["description"] = option.Description });
+            }
+
+            payload["options"] = options;
+            payload["multiSelect"] = request.MultiSelect;
+            payload["allowOther"] = true;
+            payload["allowSkip"] = true;
+            payload["timeoutSeconds"] = timeoutSeconds < 0 ? 0 : timeoutSeconds;
+            return JsonSerializer.Serialize(payload, _FrameJsonOptions);
+        }
+
+        private string BuildApprovalFrame(string eventType, string toolCallId, string? toolName, string? arguments, int seconds, string? decision)
+        {
+            Dictionary<string, object?> payload = FrameHeader(eventType);
+            payload["toolCallId"] = toolCallId;
+
+            if (decision == null)
+            {
+                payload["toolName"] = toolName ?? string.Empty;
+                payload["arguments"] = arguments ?? string.Empty;
+                payload["toolAutoApproveSeconds"] = seconds < 0 ? 0 : seconds;
+            }
+            else
+            {
+                payload["decision"] = decision;
+            }
+
+            return JsonSerializer.Serialize(payload, _FrameJsonOptions);
         }
 
         private void RaiseCompleted()

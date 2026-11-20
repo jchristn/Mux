@@ -43,7 +43,7 @@ if "%MUX_INSTALLED%"=="1" (
 echo [3/3] Removing the desktop app and tray agent...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0mux-apps.ps1" -Action Remove
 if errorlevel 1 exit /b 1
-reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v MuxAgent >nul 2>&1
+reg query "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "Mux Agent" >nul 2>&1
 if not errorlevel 1 echo Note: the agent is still registered to start at login. Run scripts\windows\remove-from-startup.bat to remove that.
 echo Done.
 endlocal

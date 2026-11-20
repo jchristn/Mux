@@ -5,8 +5,6 @@ A thin Python driver for the [mux](../../README.md) CLI. It does not reimplement
 an aggregated result. Because it wraps the CLI and its `contractVersion`-versioned JSONL contract, the SDK
 stays backend-agnostic and in lockstep with mux itself.
 
-> Beta. Tracks the mux JSONL `contractVersion` and may change alongside the CLI.
-
 ## Requirements
 
 - Python 3.8+

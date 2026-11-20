@@ -6,12 +6,12 @@ namespace Mux.Publisher.Channels.Drivers
     using Mux.Publisher.Manifest;
 
     /// <summary>
-    /// Builds a signed, notarized macOS <c>.dmg</c>. It first assembles a proper <c>.app</c> bundle
-    /// (<c>Info.plist</c>, icon, the published binary under <c>Contents/MacOS/</c>) — a bare binary gets
-    /// no Dock icon and no Gatekeeper trust — then hardened-runtime <c>codesign</c>s it, wraps it in a
-    /// <c>.dmg</c>, and <c>notarytool submit --wait</c> + <c>stapler staple</c>. Notarization is not
-    /// optional: macOS refuses unnotarized downloaded apps. Startup registration is handled by the app
-    /// on first run, so no <c>.pkg</c>/postinstall script is needed.
+    /// Builds a macOS <c>.dmg</c> for drag-to-Applications installs. It assembles and signs the <c>.app</c>
+    /// (ad hoc when no Developer ID is configured; see <see cref="MacAppBundle"/>), then lays out the disk image
+    /// window: the app, an <c>Applications</c> shortcut to drag it onto, and an <c>If &lt;App&gt; won't open.txt</c>
+    /// note with the Gatekeeper steps. With a Developer ID configured it also notarizes and staples. The
+    /// <c>.pkg</c> channel is the recommended macOS installer, since only it can put the command on PATH and
+    /// show the license for acceptance.
     /// </summary>
     public sealed class DmgDriver : DriverBase
     {
@@ -30,13 +30,13 @@ namespace Mux.Publisher.Channels.Drivers
             ChannelPlan plan = new ChannelPlan(Name);
             string project = Project(context);
             string display = Display(context);
-            string bundleId = config.OptionOrDefault("bundleId", "com.jchristn." + project);
+            string bundleId = config.OptionOrDefault("bundleId", Identifier(context));
 
             SigningEntry? mac = context.Manifest.Signing.MacOs;
-            bool canSign = mac != null && !string.IsNullOrWhiteSpace(mac.VaultRef);
+            bool canSign = MacAppBundle.CanSign(context);
             if (!canSign)
             {
-                plan.AddNote("macOS: the .dmg is UNSIGNED (no Apple Developer certificate). On first launch users must right-click the app and choose Open (or run 'xattr -dr com.apple.quarantine /Applications/" + display + ".app'); on Apple Silicon a downloaded unsigned app may report \"is damaged\" until the quarantine attribute is removed. Ship these instructions with the release.");
+                plan.AddNote("macOS: the .dmg is ad-hoc signed, not notarized (no Apple Developer certificate, by policy). Users open it with System Settings > Privacy & Security > Open Anyway, or 'xattr -dr com.apple.quarantine /Applications/" + display + ".app'. The note inside the image repeats the steps.");
             }
 
             foreach (string rid in ChannelHelpers.ResolveRuntimes(context.Manifest, config, RequiredOs))
@@ -48,57 +48,22 @@ namespace Mux.Publisher.Channels.Drivers
                     continue;
                 }
 
-                string appName = display + ".app";
-                string appDir = "dmg/" + rid + "/" + appName;
-                string binaryName = System.IO.Path.GetFileName(published.PrimaryBinary);
+                // The image's window shows everything in this folder.
+                string contentDir = "dmg/" + rid + "/content";
+                string contentAbs = System.IO.Path.Combine(context.StagingRoot, contentDir);
+                string appAbs = MacAppBundle.Assemble(plan, context, published, contentDir, display, bundleId);
 
-                // 1. Render Info.plist into the bundle.
-                plan.AddFile(appDir + "/Contents/Info.plist", RenderInfoPlist(display, bundleId, context.Version, binaryName));
-                plan.AddFile(appDir + "/Contents/PkgInfo", "APPL????\n");
+                plan.AddFile(contentDir + "/If " + display + " won't open.txt", Mux.Publisher.Publishing.UnsignedNotice.MacOsNote(display, CliFileName(context, published)));
+                plan.AddCommand(new ShellCommand("ln", new List<string> { "-sfn", "/Applications", contentAbs + "/Applications" }) { Description = "Add the Applications shortcut to drag the app onto" });
 
-                string appAbs = System.IO.Path.Combine(context.StagingRoot, appDir);
-                string macOsDir = appAbs + "/Contents/MacOS";
-                string resourcesDir = appAbs + "/Contents/Resources";
-
-                // 2. Assemble the bundle from the publish output + icon.
-                plan.AddCommand(new ShellCommand("mkdir", new List<string> { "-p", macOsDir, resourcesDir }) { Description = "Create .app bundle layout (" + rid + ")" });
-                plan.AddCommand(new ShellCommand("cp", new List<string> { "-R", published.PublishDir + "/.", macOsDir }) { Description = "Copy published binaries into the bundle" });
-                plan.AddCommand(new ShellCommand("cp", new List<string> { System.IO.Path.Combine(context.RepoRoot, "assets", "icons", "icon-macos.icns"), resourcesDir + "/" + project + ".icns" }) { Description = "Copy the app icon", ContinueOnError = true });
-                plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", macOsDir + "/" + binaryName }) { Description = "Mark the launcher executable" });
-
-                // The bundled tray agent and CLI ride inside the .app; mark them executable too. The agent is
-                // discovered beside the desktop binary (so autostart works); the CLI lives at
-                // Contents/MacOS/mux — see the note below about putting it on PATH.
-                foreach (BundledBinary extra in published.Bundled)
-                {
-                    plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", macOsDir + "/" + extra.FileName }) { Description = "Mark the bundled " + (string.IsNullOrEmpty(extra.Role) ? "binary" : extra.Role) + " executable" });
-                }
-
-                if (published.CliBinary != null)
-                {
-                    plan.AddNote("macOS: the `" + published.CliBinary + "` CLI is bundled at " + appName + "/Contents/MacOS/. A .dmg cannot edit PATH; to run `" + project + "` from a shell, symlink it: sudo ln -sf \"/Applications/" + appName + "/Contents/MacOS/" + published.CliBinary + "\" /usr/local/bin/" + project + ".");
-                }
-
-                // 3. Hardened-runtime codesign.
-                if (canSign)
-                {
-                    plan.AddCommand(new ShellCommand("codesign", new List<string>
-                    {
-                        "--force", "--deep", "--options", "runtime", "--timestamp",
-                        "--sign", "$" + mac!.VaultRef + "_IDENTITY",
-                        appAbs
-                    })
-                    { Description = "Hardened-runtime codesign the .app" });
-                }
-
-                // 4. Build the .dmg.
+                // Build the .dmg.
                 string dmgName = Naming.Dmg(project, context.Version, rid);
                 string dmgOut = System.IO.Path.Combine(context.OutputRoot, "macos", dmgName);
                 // hdiutil sizes a -srcfolder image from its own estimate, which can come up short for a large
                 // self-contained bundle ("create failed - No space left on device"). Pass an explicit size
                 // with headroom when the publish output is on disk; UDZO compresses the result, so the extra
                 // room costs nothing in the shipped .dmg.
-                List<string> createArgs = new List<string> { "create", "-volname", display, "-srcfolder", appAbs };
+                List<string> createArgs = new List<string> { "create", "-volname", display, "-srcfolder", contentAbs };
                 long publishBytes = DirectorySizeBytes(published.PublishDir);
                 if (publishBytes > 0)
                 {
@@ -109,16 +74,13 @@ namespace Mux.Publisher.Channels.Drivers
                 createArgs.AddRange(new[] { "-ov", "-format", "UDZO", dmgOut });
                 plan.AddCommand(new ShellCommand("hdiutil", createArgs) { Description = "Create the .dmg for " + rid });
 
-                // 4b. Attach a Software License Agreement so the volume shows an Agree/Disagree prompt and will
-                //     not mount until the user accepts. Done before notarize/staple so the ticket covers the
-                //     final artifact. The resource plist carries a default-English LPic/STR# plus the license
-                //     as a TEXT resource. Apple deprecated `hdiutil udifrez` and it fails on current macOS
-                //     (including the release runners), so the step is best-effort: the .dmg still ships, and the
-                //     license travels inside the app bundle as Contents/Resources/LICENSE.txt either way.
+                // Attach a Software License Agreement so older macOS shows an Agree/Disagree prompt before
+                // mounting. Apple deprecated `hdiutil udifrez` and it fails on current macOS (including the
+                // release runners), so the step is best-effort: the license also ships inside the app bundle,
+                // and the .pkg is where users accept it.
                 string slaName = "dmg/" + rid + "/sla.plist";
                 string licenseText = Mux.Publisher.Publishing.LicenseAssets.ReadLicenseText(context.RepoRoot);
                 plan.AddFile(slaName, Mux.Publisher.Publishing.LicenseAssets.DmgSlaResourcesPlist(licenseText));
-                plan.AddFile(appDir + "/Contents/Resources/LICENSE.txt", licenseText);
                 plan.AddCommand(new ShellCommand("hdiutil", new List<string>
                 {
                     "udifrez", "-xml", System.IO.Path.Combine(context.StagingRoot, slaName), "-quiet", dmgOut
@@ -128,7 +90,7 @@ namespace Mux.Publisher.Channels.Drivers
                     ContinueOnError = true
                 });
 
-                // 5. Notarize + staple.
+                // Notarize + staple (only with a Developer ID).
                 if (canSign && mac!.Notarize)
                 {
                     plan.AddCommand(new ShellCommand("xcrun", new List<string>
@@ -154,7 +116,7 @@ namespace Mux.Publisher.Channels.Drivers
         }
 
         /// <summary>
-        /// Renders an <c>Info.plist</c> for the app bundle.
+        /// Renders an <c>Info.plist</c> for the app bundle (kept for callers of the previous API).
         /// </summary>
         /// <param name="displayName">The display (and bundle) name.</param>
         /// <param name="bundleId">The CFBundleIdentifier.</param>
@@ -163,37 +125,7 @@ namespace Mux.Publisher.Channels.Drivers
         /// <returns>The rendered plist.</returns>
         public static string RenderInfoPlist(string displayName, string bundleId, string version, string executable)
         {
-            StringBuilder builder = new StringBuilder();
-            builder.AppendLine("<?xml version=\"1.0\" encoding=\"UTF-8\"?>");
-            builder.AppendLine("<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">");
-            builder.AppendLine("<plist version=\"1.0\">");
-            builder.AppendLine("<dict>");
-            AppendKey(builder, "CFBundleName", displayName);
-            AppendKey(builder, "CFBundleDisplayName", displayName);
-            AppendKey(builder, "CFBundleIdentifier", bundleId);
-            AppendKey(builder, "CFBundleVersion", version);
-            AppendKey(builder, "CFBundleShortVersionString", version);
-            AppendKey(builder, "CFBundleExecutable", executable);
-            AppendKey(builder, "CFBundleIconFile", "mux");
-            AppendKey(builder, "CFBundlePackageType", "APPL");
-            builder.AppendLine("    <key>LSMinimumSystemVersion</key>");
-            builder.AppendLine("    <string>11.0</string>");
-            builder.AppendLine("    <key>NSHighResolutionCapable</key>");
-            builder.AppendLine("    <true/>");
-            builder.AppendLine("</dict>");
-            builder.AppendLine("</plist>");
-            return builder.ToString();
-        }
-
-        private static void AppendKey(StringBuilder builder, string key, string value)
-        {
-            builder.AppendLine("    <key>" + key + "</key>");
-            builder.AppendLine("    <string>" + Xml(value) + "</string>");
-        }
-
-        private static string Xml(string value)
-        {
-            return (value ?? string.Empty).Replace("&", "&amp;").Replace("<", "&lt;").Replace(">", "&gt;");
+            return MacAppBundle.RenderInfoPlist(displayName, bundleId, version, executable);
         }
 
         /// <summary>

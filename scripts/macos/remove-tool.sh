@@ -51,7 +51,7 @@ for app in "Mux" "Mux Agent"; do
         fi
     done
 done
-if [ -f "$HOME/Library/LaunchAgents/com.jchristn.mux.agent.plist" ]; then
+if [ -f "$HOME/Library/LaunchAgents/ai.latticetech.mux.agent.plist" ] || [ -f "$HOME/Library/LaunchAgents/com.jchristn.mux.agent.plist" ]; then
     echo "Note: the agent is still registered to start at login. Run scripts/macos/remove-from-startup.sh to remove that."
 fi
 echo "Done."

@@ -86,6 +86,24 @@ namespace Test.Shared.Suites
                         MuxAssert.IsNotNull(desktop, "has a desktop artifact");
                         MuxAssert.IsTrue(desktop!.Bundle.Exists(b => b.Csproj.Contains("Mux.Agent") && b.Role == "agent"), "bundles the tray agent");
                         MuxAssert.IsTrue(desktop.Bundle.Exists(b => b.Csproj.Contains("Mux.Cli") && b.Role == "cli"), "bundles the CLI");
+                        MuxAssert.IsTrue(manifest.Channels.ContainsKey("pkg") && manifest.Channels["pkg"].Enabled, "ships a .pkg");
+                        MuxAssert.AreEqual("ai.latticetech.mux", manifest.Project.EffectiveIdentifier, "identifier");
+                        MuxAssert.AreEqual("Lattice AI, LLC", manifest.Project.EffectivePublisher, "publisher");
+                        MuxAssert.AreEqual("Your AI agent. Your models. Your infra. Anywhere.", manifest.Project.Tagline, "tagline");
+                        MuxAssert.IsFalse(manifest.Project.Description.Contains('\u2014'), "no em-dash in the description");
+                        return Task.CompletedTask;
+                    }),
+
+                    new TestCaseDescriptor("PublisherManifest", "IdentifierDefaultsAndValidation", "The identifier defaults to ai.latticetech.<name> and must be lowercase reverse-DNS", (CancellationToken ct) =>
+                    {
+                        PublisherManifest manifest = PublisherManifest.Parse(ValidJson);
+                        MuxAssert.AreEqual("ai.latticetech.mux", manifest.Project.EffectiveIdentifier, "default identifier");
+                        MuxAssert.AreEqual("ai.latticetech.mux.agent", manifest.Project.AgentIdentifier, "agent identifier");
+                        MuxAssert.AreEqual("Lattice AI, LLC", manifest.Project.EffectivePublisher, "default publisher");
+                        manifest.Project.Identifier = "Com.Example";
+                        MuxAssert.IsTrue(ManifestValidator.Collect(manifest).Exists(e => e.Contains("identifier")), "rejects a non-lowercase identifier");
+                        manifest.Project.Identifier = "ai.latticetech.mux";
+                        MuxAssert.AreEqual(0, ManifestValidator.Collect(manifest).Count, "accepts reverse-DNS");
                         return Task.CompletedTask;
                     })
                 });

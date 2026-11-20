@@ -7,5 +7,3 @@ Web-search abstractions and provider clients used by [**mux**](https://github.co
 ## License
 
 MIT. See the [repository](https://github.com/jchristn/Mux) for full documentation.
-
-> **Beta:** APIs may change between releases.

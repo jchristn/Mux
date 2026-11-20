@@ -26,7 +26,7 @@ namespace Mux.Publisher.Channels.Drivers
 
             ChannelPlan plan = new ChannelPlan(Name) { EndsAtExternalGate = true };
             string project = Project(context);
-            string appId = config.OptionOrDefault("appId", "com.jchristn." + project);
+            string appId = config.OptionOrDefault("appId", Identifier(context));
 
             PublishedArtifact? published = context.PublishedFor("linux-x64");
             string binaryName = published != null ? System.IO.Path.GetFileName(published.PrimaryBinary) : project;

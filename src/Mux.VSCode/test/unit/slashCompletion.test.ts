@@ -127,7 +127,7 @@ test('complete dashboard bootstrap wires command and endpoint autocomplete into 
         if (!elements.has(id)) elements.set(id, Object.assign(new Element(), {
             id, style: {}, dataset: {}, options: [], scrollHeight: 44,
             querySelectorAll: () => [], querySelector: () => null,
-            classList: { add: () => {}, remove: () => {}, toggle: () => {} },
+            classList: { add: () => {}, remove: () => {}, toggle: () => {}, contains: () => false },
             getAttribute: () => null,
         }));
         return elements.get(id);

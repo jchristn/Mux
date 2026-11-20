@@ -57,18 +57,21 @@ mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
 
 # Replace anything scripts/linux/run-at-startup.sh may have created, so the agent does not start twice.
-SERVICE="$HOME/.config/systemd/user/mux-agent.service"
-DESKTOP="$HOME/.config/autostart/mux-agent.desktop"
-if [ -f "$SERVICE" ]; then
-    systemctl --user disable --now mux-agent >/dev/null 2>&1 || true
-    rm -f "$SERVICE"
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
-    echo "Removed the old mux-agent systemd user service."
-fi
-if [ -f "$DESKTOP" ]; then
-    rm -f "$DESKTOP"
-    echo "Removed the old desktop autostart entry."
-fi
+# Both the current names and the mux-agent names mux 1.x used.
+for unit in ai.latticetech.mux.agent mux-agent; do
+    SERVICE="$HOME/.config/systemd/user/$unit.service"
+    DESKTOP="$HOME/.config/autostart/$unit.desktop"
+    if [ -f "$SERVICE" ]; then
+        systemctl --user disable --now "$unit" >/dev/null 2>&1 || true
+        rm -f "$SERVICE"
+        systemctl --user daemon-reload >/dev/null 2>&1 || true
+        echo "Removed the old $unit systemd user service."
+    fi
+    if [ -f "$DESKTOP" ]; then
+        rm -f "$DESKTOP"
+        echo "Removed the old desktop autostart entry."
+    fi
+done
 
 # The launcher starts from a fresh wsl.exe login, so pass the environment the agent needs explicitly.
 set -- env MUX_AGENT_AUTOSTART=0

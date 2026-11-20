@@ -139,6 +139,14 @@ to do rather than just failing. When it is connected, the same click opens **Abo
 and server versions, links to mux on GitHub and the docs, and a button to open the connected server's
 dashboard, which is the fuller configuration, monitoring, and usage surface in the browser.
 
+## Mux Cloud
+
+`mux: Connect to Mux Cloud` signs this machine in to [Mux Cloud](https://app.usemux.ai) (email, then a masked
+password that the local hub sends to Mux Cloud once and never stores) after showing what remote access allows. Once
+signed in, the same command shows the status, turns remote tool approval on or off, opens Mux Cloud, or signs out.
+A status bar item shows the connection state (`Connecting`, `Connected`, `Reconnecting`, `SignedOut`, `Revoked`)
+once the machine has been signed in.
+
 ## Troubleshooting
 
 Failures fall into a few classes. When the panel reports it cannot reach a server and auto-start is off, either

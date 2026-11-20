@@ -59,6 +59,7 @@ namespace Mux.Core.Models
         private RestServerSettings _Rest = new RestServerSettings();
         private TelemetrySettings _Telemetry = new TelemetrySettings();
         private ObservabilitySettings _Observability = new ObservabilitySettings();
+        private CloudSettings _Cloud = new CloudSettings();
 
         #endregion
 
@@ -649,6 +650,17 @@ namespace Mux.Core.Models
         {
             get => _Observability;
             set => _Observability = value ?? new ObservabilitySettings();
+        }
+
+        /// <summary>
+        /// Mux Cloud connection: whether this machine keeps an outbound tunnel to Mux Cloud, its enrolled machine
+        /// credential, and whether remote users may approve tools. See <c>WEBSOCKETS_API.md</c>.
+        /// </summary>
+        [JsonPropertyName("cloud")]
+        public CloudSettings Cloud
+        {
+            get => _Cloud;
+            set => _Cloud = value ?? new CloudSettings();
         }
 
         #endregion

@@ -14,6 +14,8 @@ import { MuxServerLifecycle } from './server/lifecycle';
 import { SetupWizard } from './setup/SetupWizard';
 import { readSettings } from './config/settings';
 import { ConnectionStatusBar } from './server/StatusBar';
+import { CloudStatusBar } from './cloud/CloudStatusBar';
+import { runCloudCommand } from './cloud/cloudCommands';
 import { SessionNode, SessionTreeProvider } from './sessions/SessionTree';
 import { initLogger, log } from './util/logger';
 
@@ -74,6 +76,8 @@ export function activate(context: vscode.ExtensionContext): void {
     context.subscriptions.push(endpointPicker);
 
     context.subscriptions.push(new ConnectionStatusBar(lifecycle));
+    const cloudBar = new CloudStatusBar(lifecycle);
+    context.subscriptions.push(cloudBar, vscode.commands.registerCommand('mux.cloud', () => runCloudCommand(lifecycle, cloudBar)));
 
     const manage = new ManageTreeProvider(lifecycle);
     context.subscriptions.push(vscode.window.registerTreeDataProvider('mux.manage', manage));

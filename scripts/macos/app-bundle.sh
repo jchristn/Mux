@@ -125,7 +125,7 @@ install_macos_app() {
 <dict>
     <key>CFBundleName</key><string>$name</string>
     <key>CFBundleDisplayName</key><string>$name</string>
-    <key>CFBundleIdentifier</key><string>com.jchristn.mux.$component</string>
+    <key>CFBundleIdentifier</key><string>ai.latticetech.mux.$component</string>
     <key>CFBundleVersion</key><string>$version</string>
     <key>CFBundleShortVersionString</key><string>$version</string>
     <key>CFBundleExecutable</key><string>$executable</string>

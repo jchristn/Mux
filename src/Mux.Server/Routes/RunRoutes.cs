@@ -109,6 +109,8 @@ namespace Mux.Server.Routes
                 Model = handle.Model,
                 Status = StatusName(handle.Status),
                 IsTerminal = handle.IsTerminal,
+                PendingApprovalCount = handle.PendingApprovalCount,
+                PendingQuestionCount = handle.PendingQuestionCount,
                 StartedUtc = handle.StartedUtc,
                 CompletedUtc = handle.CompletedUtc
             };
@@ -130,6 +132,8 @@ namespace Mux.Server.Routes
                 Model = handle.Model,
                 Status = StatusName(handle.Status),
                 IsTerminal = handle.IsTerminal,
+                PendingApprovalCount = handle.PendingApprovalCount,
+                PendingQuestionCount = handle.PendingQuestionCount,
                 StartedUtc = handle.StartedUtc,
                 CompletedUtc = handle.CompletedUtc,
                 IterationsCompleted = handle.IterationsCompleted,

@@ -2,6 +2,7 @@ namespace Mux.Desktop.Services
 {
     using System;
     using System.Collections.Generic;
+    using Mux.Core.Keybindings;
 
     /// <summary>
     /// The front-end-agnostic editing model behind the desktop keybindings editor. It layers a user override

@@ -32,8 +32,9 @@ namespace Mux.Agent
             }
 
             // On first run, register the agent to start at login (idempotent, best-effort, opt-out via
-            // MUX_AGENT_AUTOSTART=0). Doing this in the app means installers need no startup script — which
-            // is why macOS ships a plain .dmg rather than a .pkg.
+            // MUX_AGENT_AUTOSTART=0), and move a mux 1.x registration to the current name. The .pkg, the
+            // Windows installer, and the Linux packages also start the agent at login; registration here is a no-op
+            // when one of them already did.
             TryRegisterStartup(configDirectory);
 
             try

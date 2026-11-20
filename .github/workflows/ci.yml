@@ -93,10 +93,12 @@ jobs:
         run: dotnet build src/Mux.sln --configuration Release
 
       - name: xUnit adapter
-        run: dotnet test src/Test.Xunit/Test.Xunit.csproj --configuration Release --no-build
+        run: dotnet test src/Test.Xunit/Test.Xunit.csproj --configuration Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type none
+        timeout-minutes: 60
 
       - name: NUnit adapter
-        run: dotnet test src/Test.Nunit/Test.Nunit.csproj --configuration Release --no-build
+        run: dotnet test src/Test.Nunit/Test.Nunit.csproj --configuration Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type none
+        timeout-minutes: 60
 
   docker-integration:
     name: Docker integration (real services)

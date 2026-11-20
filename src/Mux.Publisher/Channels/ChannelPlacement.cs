@@ -62,6 +62,34 @@ namespace Mux.Publisher.Channels
         }
 
         /// <summary>
+        /// Whether a channel publishes to a package manager or repository (a step that needs an account or token
+        /// and runs only after the GitHub Release, behind the ENABLE_PACKAGE_MANAGERS switch), as opposed to an
+        /// installer or archive that goes on the release itself.
+        /// </summary>
+        /// <param name="channelName">The channel key.</param>
+        /// <param name="config">The channel config (its driver may differ from the key).</param>
+        /// <returns>True for nuget, scoop, homebrew, winget, chocolatey, apt, yum, snap, and flatpak.</returns>
+        public static bool IsPackageManager(string channelName, ChannelConfig config)
+        {
+            string driverName = (config != null && !string.IsNullOrWhiteSpace(config.Driver)) ? config.Driver! : channelName;
+            switch (driverName.ToLowerInvariant())
+            {
+                case "nuget":
+                case "scoop":
+                case "homebrew":
+                case "winget":
+                case "chocolatey":
+                case "apt":
+                case "yum":
+                case "snap":
+                case "flatpak":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
         /// Lists the enabled channels assigned to an OS job, ordered by stage then name.
         /// </summary>
         /// <param name="manifest">The manifest.</param>

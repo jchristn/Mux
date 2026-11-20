@@ -5,7 +5,7 @@ namespace Mux.Desktop.Views
 
     /// <summary>
     /// Formats an Avalonia key press into the lowercase <c>modifier+key</c> chord string (for example
-    /// <c>ctrl+k</c> or <c>f12</c>) used by <see cref="Mux.Desktop.Services.KeybindingCatalog"/> and persisted
+    /// <c>ctrl+k</c> or <c>f12</c>) used by <see cref="Mux.Core.Keybindings.KeybindingCatalog"/> and persisted
     /// to <c>keybindings.json</c>. Shared by the capture dialog (which records a rebind) and the shell (which
     /// resolves a live key press back to a bound command), so both speak exactly the same chord vocabulary.
     /// </summary>

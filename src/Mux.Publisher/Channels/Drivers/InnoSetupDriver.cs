@@ -6,11 +6,12 @@ namespace Mux.Publisher.Channels.Drivers
     using Mux.Publisher.Manifest;
 
     /// <summary>
-    /// Builds a signed Windows <c>.exe</c> installer with Inno Setup — the least-ceremony installer for
-    /// a GUI/desktop app. The installer lays down the self-contained publish, adds a Start-menu shortcut,
-    /// and optionally launches the app after install; the app self-registers login-startup on first run,
-    /// so the installer itself does not write a Run key. The same signed <c>.exe</c> feeds winget and
-    /// Chocolatey.
+    /// Builds the Windows <c>.exe</c> installer with Inno Setup, the least-ceremony installer for a desktop app.
+    /// The wizard shows the logo, the product name, a welcome page with the tagline and what gets installed, and
+    /// the license (which must be accepted). It lays down the self-contained publish, adds the install folder to
+    /// the system PATH for the bundled command, adds a Start-menu shortcut, and starts the tray agent as the
+    /// signed-in user (not elevated), which registers itself to start at sign-in. The same <c>.exe</c> feeds
+    /// winget and Chocolatey.
     /// </summary>
     public sealed class InnoSetupDriver : DriverBase
     {
@@ -48,12 +49,30 @@ namespace Mux.Publisher.Channels.Drivers
                 string licenseName = "inno/" + project + "-" + rid + "-LICENSE.txt";
                 plan.AddFile(licenseName, Mux.Publisher.Publishing.LicenseAssets.ReadLicenseText(context.RepoRoot));
 
+                string? agentExe = AgentFileName(context, published);
+                string? cliExe = CliFileName(context, published);
+                string installerAssets = System.IO.Path.Combine(context.RepoRoot, "assets", "installer");
                 string script = RenderIss(new InnoInputs
                 {
                     AppName = display,
-                    Publisher = "Joel Christner",
+                    Publisher = context.Manifest.Project.EffectivePublisher,
+                    PublisherUrl = context.Manifest.Project.EffectivePublisherUrl,
                     Version = context.Version,
                     Url = context.Manifest.Project.Homepage,
+                    WelcomeText = RenderWelcomeText(display, context.Manifest.Project.Tagline, context.Version, cliExe, agentExe != null),
+                    AgentExe = agentExe ?? string.Empty,
+                    WizardImageFiles = new List<string>
+                    {
+                        System.IO.Path.Combine(installerAssets, "wizard-164x314.bmp"),
+                        System.IO.Path.Combine(installerAssets, "wizard-246x459.bmp"),
+                        System.IO.Path.Combine(installerAssets, "wizard-328x604.bmp")
+                    },
+                    WizardSmallImageFiles = new List<string>
+                    {
+                        System.IO.Path.Combine(installerAssets, "wizard-small-55x58.bmp"),
+                        System.IO.Path.Combine(installerAssets, "wizard-small-83x80.bmp"),
+                        System.IO.Path.Combine(installerAssets, "wizard-small-110x106.bmp")
+                    },
                     AppExe = appExe,
                     PublishDir = published.PublishDir,
                     OutputBaseName = System.IO.Path.GetFileNameWithoutExtension(installer),
@@ -120,6 +139,21 @@ namespace Mux.Publisher.Channels.Drivers
             /// <summary>The publisher name.</summary>
             public string Publisher { get; set; } = string.Empty;
 
+            /// <summary>The publisher's URL (AppPublisherURL); defaults to <see cref="Url"/>.</summary>
+            public string PublisherUrl { get; set; } = string.Empty;
+
+            /// <summary>The welcome page text (WelcomeLabel2), with <c>%n</c> line breaks; empty keeps Inno's default.</summary>
+            public string WelcomeText { get; set; } = string.Empty;
+
+            /// <summary>The bundled tray agent's executable name, or empty when none is bundled.</summary>
+            public string AgentExe { get; set; } = string.Empty;
+
+            /// <summary>The tall welcome-page images, smallest first (100%, 150%, 200% scaling).</summary>
+            public List<string> WizardImageFiles { get; set; } = new List<string>();
+
+            /// <summary>The small inner-page images, smallest first.</summary>
+            public List<string> WizardSmallImageFiles { get; set; } = new List<string>();
+
             /// <summary>The release version.</summary>
             public string Version { get; set; } = string.Empty;
 
@@ -149,6 +183,37 @@ namespace Mux.Publisher.Channels.Drivers
         }
 
         /// <summary>
+        /// Renders the welcome page text: the tagline, then what the installer puts on the machine. Uses Inno's
+        /// <c>%n</c> line breaks.
+        /// </summary>
+        /// <param name="display">The product name.</param>
+        /// <param name="tagline">The tagline (may be empty).</param>
+        /// <param name="version">The release version.</param>
+        /// <param name="cliExe">The bundled command's executable name, or null.</param>
+        /// <param name="hasAgent">Whether a tray agent is bundled.</param>
+        /// <returns>The WelcomeLabel2 value.</returns>
+        public static string RenderWelcomeText(string display, string tagline, string version, string? cliExe, bool hasAgent)
+        {
+            List<string> parts = new List<string> { "the " + display + " desktop app" };
+            if (!string.IsNullOrWhiteSpace(cliExe))
+            {
+                parts.Add("the " + System.IO.Path.GetFileNameWithoutExtension(cliExe) + " command (added to your PATH)");
+            }
+
+            if (hasAgent)
+            {
+                parts.Add("the " + display + " tray agent, which starts when you sign in");
+            }
+
+            string list = parts.Count == 1 ? parts[0]
+                : string.Join(", ", parts.GetRange(0, parts.Count - 1)) + (parts.Count > 2 ? "," : string.Empty) + " and " + parts[parts.Count - 1];
+            string text = string.IsNullOrWhiteSpace(tagline) ? string.Empty : tagline + "%n%n";
+            text += "This will install " + display + " " + version + " on your computer: " + list + ".";
+            text += "%n%nIt is recommended that you close all other applications before continuing.";
+            return text;
+        }
+
+        /// <summary>
         /// Renders an Inno Setup <c>.iss</c> script from inputs. Deterministic AppId is derived from the
         /// app name so upgrades replace prior installs.
         /// </summary>
@@ -166,7 +231,9 @@ namespace Mux.Publisher.Channels.Drivers
             builder.AppendLine("AppName=" + inputs.AppName);
             builder.AppendLine("AppVersion=" + inputs.Version);
             builder.AppendLine("AppPublisher=" + inputs.Publisher);
-            builder.AppendLine("AppPublisherURL=" + inputs.Url);
+            builder.AppendLine("AppPublisherURL=" + (string.IsNullOrWhiteSpace(inputs.PublisherUrl) ? inputs.Url : inputs.PublisherUrl));
+            builder.AppendLine("AppSupportURL=" + inputs.Url);
+            builder.AppendLine("AppUpdatesURL=" + inputs.Url.TrimEnd('/') + "/releases");
             builder.AppendLine("DefaultDirName={autopf}\\" + inputs.AppName);
             builder.AppendLine("DefaultGroupName=" + inputs.AppName);
             builder.AppendLine("UninstallDisplayIcon={app}\\" + inputs.AppExe);
@@ -191,6 +258,24 @@ namespace Mux.Publisher.Channels.Drivers
                 builder.AppendLine("LicenseFile=" + inputs.LicenseFile);
             }
 
+            // Logo artwork; Inno picks the variant that best matches the display's scaling.
+            if (inputs.WizardImageFiles.Count > 0)
+            {
+                builder.AppendLine("WizardImageFile=" + string.Join(",", inputs.WizardImageFiles));
+            }
+
+            if (inputs.WizardSmallImageFiles.Count > 0)
+            {
+                builder.AppendLine("WizardSmallImageFile=" + string.Join(",", inputs.WizardSmallImageFiles));
+            }
+
+            if (!string.IsNullOrWhiteSpace(inputs.WelcomeText))
+            {
+                builder.AppendLine();
+                builder.AppendLine("[Messages]");
+                builder.AppendLine("WelcomeLabel2=" + inputs.WelcomeText);
+            }
+
             builder.AppendLine();
             builder.AppendLine("[Files]");
             builder.AppendLine("Source: \"" + inputs.PublishDir + "\\*\"; DestDir: \"{app}\"; Flags: recursesubdirs createallsubdirs ignoreversion");
@@ -203,8 +288,24 @@ namespace Mux.Publisher.Channels.Drivers
             builder.AppendLine("Name: \"desktopicon\"; Description: \"Create a desktop shortcut\"; GroupDescription: \"Additional icons:\"; Flags: unchecked");
             builder.AppendLine();
             builder.AppendLine("[Run]");
-            builder.AppendLine("; Launch after install; the app registers login-startup for the tray agent on first run.");
+            if (!string.IsNullOrWhiteSpace(inputs.AgentExe))
+            {
+                // Start the tray agent as the signed-in user (not the elevated installer); on its first run it
+                // registers itself to start at sign-in.
+                builder.AppendLine("Filename: \"{app}\\" + inputs.AgentExe + "\"; Flags: nowait runasoriginaluser skipifsilent");
+            }
+
+            builder.AppendLine("; Optionally launch the desktop app when setup finishes.");
             builder.AppendLine("Filename: \"{app}\\" + inputs.AppExe + "\"; Description: \"Launch " + inputs.AppName + "\"; Flags: nowait postinstall skipifsilent");
+
+            if (!string.IsNullOrWhiteSpace(inputs.AgentExe))
+            {
+                // Stop the running app and agent so their files can be removed.
+                builder.AppendLine();
+                builder.AppendLine("[UninstallRun]");
+                builder.AppendLine("Filename: \"{sys}\\taskkill.exe\"; Parameters: \"/F /IM " + inputs.AgentExe + "\"; Flags: runhidden; RunOnceId: \"StopAgent\"");
+                builder.AppendLine("Filename: \"{sys}\\taskkill.exe\"; Parameters: \"/F /IM " + inputs.AppExe + "\"; Flags: runhidden; RunOnceId: \"StopApp\"");
+            }
 
             if (inputs.AddToPath)
             {

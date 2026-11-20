@@ -510,6 +510,9 @@ Resolution priority:
 | `MUX_OTLP_ENDPOINT` / `MUX_OTLP_PROTOCOL` | OTLP collector endpoint and protocol (`grpc` or `httpprotobuf`) |
 | `MUX_PROMETHEUS_ENABLED` / `MUX_PROMETHEUS_PORT` | in-process Prometheus `/metrics` endpoint for long-running processes |
 | `MUX_OTEL_SERVICE_NAME` | the `service.name` mux reports as |
+| `MUX_CLOUD_ENABLED` | turn the Mux Cloud connection on or off (`cloud.enabled`) |
+| `MUX_CLOUD_SERVER_URL` | Mux Cloud server URL (`cloud.serverUrl`) |
+| `MUX_CLOUD_ALLOW_REMOTE_TOOL_APPROVAL` | allow or refuse tool approvals from Mux Cloud (`cloud.allowRemoteToolApproval`) |
 
 Config values may reference environment variables using `${VAR_NAME}`, `%VAR_NAME%`, `$VAR_NAME`, or `$env:VAR_NAME`. The interactive endpoint wizard accepts the same forms and writes stored references as `${VAR_NAME}`. If both `--config-dir` and `MUX_CONFIG_DIR` are present, the CLI flag wins.
 
@@ -564,6 +567,61 @@ turn that off. `mux serve` runs the server without the agent. Configure the serv
 
 Environment overrides: `MUX_REST_HOST`, `MUX_REST_PORT`, `MUX_REST_APIKEY`. The server is **opt-in** and never
 starts from a plain `mux`/`mux print` run. Full reference: [REST_API.md](REST_API.md).
+
+## Mux Cloud (`settings.json` `cloud`)
+
+Mux Cloud lets you use this machine from a browser on another computer or from your phone, exactly as if you were
+at it. Sign in once with `mux cloud login` (or `/cloud login` in the terminal UI, the Mux Cloud window in the
+desktop app, the Mux Cloud panel in the dashboard's Settings, or `mux: Connect to Mux Cloud` in VS Code). Your email
+and password are exchanged for a machine credential, which is saved here; the password is never stored. The process
+that owns the local hub port (normally the tray agent) then keeps one outbound WebSocket open to Mux Cloud. It
+watches this file, so signing in or out from any surface applies without a restart.
+
+```json
+{
+  "cloud": {
+    "enabled": true,
+    "serverUrl": "https://app.usemux.ai",
+    "machineId": "mch_01JD3M5ZK7T2R8W4Q6Y9P3N1A0",
+    "machineName": "studio-mac",
+    "machineSecret": "mcs_...",
+    "accountEmail": "you@example.com",
+    "allowRemoteToolApproval": true,
+    "heartbeatSeconds": 20,
+    "reconnectMaxDelaySeconds": 60,
+    "allowInvalidCertificates": false
+  }
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `enabled` | bool | Connect when signed in. Set by sign-in, cleared by sign-out. Default false. |
+| `serverUrl` | string | Mux Cloud URL. Default `https://app.usemux.ai`. Point it at your own server to self-host. |
+| `machineId` | string or null | Machine id issued at sign-in. Written only by signing in or out. |
+| `machineName` | string or null | How this machine is listed in Mux Cloud. Null uses the host name. |
+| `machineSecret` | string or null | This machine's Mux Cloud credential. Written only by signing in or out, and masked in every API response. Anyone who can read it can connect as this machine. |
+| `accountEmail` | string or null | The account the machine is signed in to, for display. |
+| `allowRemoteToolApproval` | bool | Whether users signed in to Mux Cloud may approve tools that edit files or run commands on this machine. Default true. When false, runs started through Mux Cloud deny those tools; local use is unaffected. |
+| `heartbeatSeconds` | int | Proposed heartbeat interval, clamped 5-300. The server's value wins. Default 20. |
+| `reconnectMaxDelaySeconds` | int | Largest delay between reconnect attempts, clamped 5-3600. Default 60. |
+| `allowInvalidCertificates` | bool | Accept an invalid TLS certificate from a self-hosted server. Default false. |
+
+`enabled`, `machineId`, `machineSecret`, and `accountEmail` are changed only by signing in or out
+(`SettingsLoader.UpdateCloud`): a surface that saves an older copy of `settings.json` never signs the machine out or
+back in. Every other field follows the usual last-save-wins rule and is editable from every surface, including
+through Mux Cloud itself.
+
+Anyone signed in to the Mux Cloud account can operate this machine remotely, including approving tools unless
+`allowRemoteToolApproval` is false. Turn it off with `mux cloud remote-approval off`, `/cloud remote-approval off`,
+the checkbox in the desktop app or dashboard, or `MUX_CLOUD_ALLOW_REMOTE_TOOL_APPROVAL=false`.
+
+`mux cloud status` shows the connection as `Not signed in`, `Off` (signed in, but the connection is turned off or no
+mux process is running it), `Connecting`, `Connected`, `Reconnecting`, `Signed out` (the credential was rejected; sign
+in again), or `Removed` (the machine was removed in Mux Cloud), with a plain-language reason such as "This machine's
+clock is off by more than 2 minutes". Every surface shows the same labels, translated where the surface is. Only one process per
+machine runs the tunnel (a `cloud-tunnel.lock` file in the config directory). The protocol is described in
+[WEBSOCKETS_API.md](../WEBSOCKETS_API.md#9-mux-cloud-tunnel-client-side).
 
 ## Usage telemetry (`settings.json` `telemetry`)
 

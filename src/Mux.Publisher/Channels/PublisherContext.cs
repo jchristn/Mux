@@ -166,6 +166,20 @@ namespace Mux.Publisher.Channels
                 return null;
             }
         }
+
+        /// <summary>The bundled tray agent's file name, or null when the payload has no agent.</summary>
+        public string? AgentBinary
+        {
+            get
+            {
+                foreach (BundledBinary b in Bundled)
+                {
+                    if (string.Equals(b.Role, "agent", System.StringComparison.OrdinalIgnoreCase)) return b.FileName;
+                }
+
+                return null;
+            }
+        }
     }
 
     /// <summary>

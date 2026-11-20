@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the mux macos installers (.dmg) and drop them under installers/<version>/.
+# Build the mux macOS installers (.pkg, .dmg, and archives) and drop them under installers/<version>/.
 # Native installer formats are OS-locked, so this builds only the macos channels. Run
 # build-installers on each OS (scripts\windows\build-installers.bat on Windows) for the full set, or
 # push a version tag to let the GitHub Actions matrix build all three (.github/workflows/release.yml).

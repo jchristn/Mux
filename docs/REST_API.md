@@ -123,6 +123,16 @@ All paths are versioned under `/v1.0/api`.
 | GET/PUT | `/v1.0/api/subagents` | key | Subagent definitions (including `Isolation`: `worktree` or empty). |
 | GET/PUT | `/v1.0/api/hooks` | key | Plugin config: `{ "hooks": [ … ], "commands": [ … ] }`. |
 | GET/PUT | `/v1.0/api/keybindings` | key | Command-id → chord overrides. |
+| GET | `/v1.0/api/keybindings/commands` | key | Every bindable command: `{ Items: [ { CommandId, Title, Category, DefaultChord, EffectiveChord, Overridden } ], Count }`. `EffectiveChord` is the override when one is recorded, else the default; null (or omitted) when unbound. Unbind with a `PUT /keybindings` item whose `Chord` is blank; reset by sending the default chord (an override equal to the default is dropped). |
+| GET | `/v1.0/api/trust?workingDirectory=<dir>` | key | Project trust for the project containing `workingDirectory` (the `/trust` command): `{ WorkingDirectory, ProjectRoot, Level }`, `Level` one of `all`, `playbooks`, `ignore`, `unknown`. |
+| PUT | `/v1.0/api/trust` | key | `{ "WorkingDirectory", "Level" }` with `all`, `playbooks`, `ignore`, or `reset` (removes the decision). Returns the same shape. `400` for a missing directory or unknown level. Allowed through Mux Cloud. |
+| GET | `/v1.0/api/processes` | key | The background processes the model started with `process_start`: `{ Items: [ { Id, Name, Command, WorkingDirectory, ProcessId, StartedUtc, ExitedUtc, Running, ExitCode, StoppedByUser, OutputChars, UnreadChars } ], Count }`. |
+| GET | `/v1.0/api/processes/{id}/output?chars=<n>` | key | Recent output: `{ Id, Command, Text, Running, ExitCode }` (`chars` default 4000, at most 200000). `404` for an unknown id. |
+| POST | `/v1.0/api/processes/{id}/stop` | key | Stop a process (its whole tree): `{ Id, Text, DroppedChars, Running, ExitCode, … }`. The id `all` stops every running process and returns `{ Stopped }`. |
+| DELETE | `/v1.0/api/processes` | key | Remove exited processes: `{ Removed }`. |
+| GET | `/v1.0/api/search` | key | Web search settings: `{ Enabled, AllowFallback, Providers: [ { Name, ProviderType, Endpoint, ApiKeySet, Enabled, IsDefault, TimeoutMs } ], ProviderTypes }`. API keys are never returned. |
+| PUT | `/v1.0/api/search` | key | Replace the search settings (same shape; `ApiKey` is write-only and a blank value keeps the key stored under the same name; providers left out are removed; the first enabled provider becomes the default when none is marked). `400` for a missing or duplicate name or an unknown `ProviderType` (`tavily`, `you`). |
+| DELETE | `/v1.0/api/search/providers/{name}` | key | Delete a provider; returns the settings. `404` when unknown. |
 | GET | `/v1.0/api/skills` | key | Skills list (name, description, enabled, valid, command count). |
 | GET | `/v1.0/api/skills/detail?id=<id>` | key | One skill with its `SKILL.md` body. |
 | PUT | `/v1.0/api/skills/enabled` | key | Toggle enablement: `{ "id": "<id>", "enabled": true }`. |
@@ -138,10 +148,13 @@ All paths are versioned under `/v1.0/api`.
 | POST | `/v1.0/api/sessions/{id}/metadata` | key | Edit a session's labels/tags. Body: `{ "addLabels": ["wip"], "removeLabels": [], "setTags": [{ "key": "env", "value": "prod" }], "removeTagKeys": [] }` — all fields optional. Tag keys are normalized (lowercased, slugified to `[a-z0-9._-]`); labels dedupe case-insensitively. Returns the updated summary. `404` when the id is unknown; `400` when a label/tag fails normalization. |
 | GET | `/v1.0/api/sessions/export?id=<id>&format=md\|html` | key | Render a session → `{ "format", "filename", "content" }` for download. |
 | DELETE | `/v1.0/api/sessions?id=<id>` | key | Delete a session. |
+| POST | `/v1.0/api/sessions/{id}/compact` | key | Compact a saved conversation (the `/compact` command): the model summarizes the older turns and the shorter history is saved. Optional body `{ "Endpoint" }` (default: the session's endpoint, then the default endpoint). Returns `{ Compacted, Message, Endpoint, MessagesBefore, MessagesAfter, EstimatedTokensBefore, EstimatedTokensAfter, ContextWindow }`. `404` unknown session, `409` while a run for the session is in progress, `502` when the model fails. |
 | POST | `/v1.0/api/chat` | key | Plain (tool-free) chat completion against a configured endpoint. Body: `{ "endpoint": "<name>", "messages": [{ "role": "user", "content": "…" }] }` → `{ "role": "assistant", "content": "…", "endpoint", "model", "stats": { "ttftMs", "streamingMs", "totalMs", "inputTokens", "outputTokens", "totalTokens" } }`. |
-| POST | `/v1.0/api/chat/stream` | key | Agentic run over Server-Sent Events (`run`/`token`/`thinking`/`tool`/`approval`/`done`/`canceled`/`error`). The first event is `run` (`{ "RunId", "SessionId" }`) so the client can address the run (cancel it via `POST /v1.0/api/runs/{runId}/cancel`, or subscribe over the WebSocket). Body adds optional `id` (session), `workingDirectory` (the directory tools resolve paths against; it must exist, else `400`; falls back to the session's recorded directory, then the server's), and, with `mux serve --allow-tools`, mutating tools raise an `approval` event answered by `POST /v1.0/api/chat/approve`. `planMode: true` runs the turn in plan mode (read-only tools only); when the model presents its plan with `exit_plan`, a `plan` event carries `{ plan, steps, text, executionPrompt }` before `done`, and the client approves by sending `executionPrompt` as the next turn without `planMode`. The model's `ask_user` tool gets the no-user answer over the REST API. Persists the turn to the shared session store. |
+| POST | `/v1.0/api/chat/stream` | key | Agentic run over Server-Sent Events (`run`/`token`/`thinking`/`tool`/`attachments`/`compacted`/`approval`/`ask_user`/`plan`/`done`/`canceled`/`error`). `tool` events carry `{ Id, Name, Status, ElapsedMs, Arguments, Result, ResultTruncated }`: `Arguments` (raw JSON text) on `running`, `Result` (truncated to 8000 characters, like the desktop tool card) on `ok`/`fail`. `attachments` (once, when the prompt had `@path` mentions) is `{ Attached: [ { Path, Kind, Bytes, Lines, Inlined } ], Skipped: [ { Path, Reason } ], Notes, TotalBytes }`. `compacted` (when the run compacts its context) is `{ MessagesBefore, MessagesAfter, EstimatedTokensBefore, EstimatedTokensAfter, SummaryCreated, Strategy, Reason }`. `ask_user` (only when the request sets `askUser: true`; otherwise the model is told no user is available) is `{ RunId, QuestionId, Question, Options: [ { Label, Description } ], MultiSelect, AllowOther, AllowSkip, TimeoutSeconds }`; answer with `POST /v1.0/api/chat/answer`; an unanswered question times out after 15 minutes and the model continues with a default. The first event is `run` (`{ "RunId", "SessionId" }`) so the client can address the run (cancel it via `POST /v1.0/api/runs/{runId}/cancel`, or subscribe over the WebSocket). Body adds optional `id` (session), `workingDirectory` (the directory tools resolve paths against; it must exist, else `400`; falls back to the session's recorded directory, then the server's), and, with `mux serve --allow-tools`, mutating tools raise an `approval` event answered by `POST /v1.0/api/chat/approve`. `planMode: true` runs the turn in plan mode (read-only tools only); when the model presents its plan with `exit_plan`, a `plan` event carries `{ plan, steps, text, executionPrompt }` before `done`, and the client approves by sending `executionPrompt` as the next turn without `planMode`. `autoApproveTools: true` runs tools that would raise an `approval` event without asking; it is honored only when the caller may approve tools (see `GET /v1.0/api/chat/capabilities`), so a request relayed through Mux Cloud while `cloud.allowRemoteToolApproval` is false still has those tools denied. Persists the turn to the shared session store, and once the conversation passes 250 characters of content replaces the first-prompt title with an AI-generated one (as the desktop does), signalling `transcript_changed`. |
+| POST | `/v1.0/api/chat/answer` | key | Answer an `ask_user` question: `{ "RunId", "QuestionId", "Answers": [ "<label>" ], "Other"?: "<free text>", "Skip"?: false }` → `{ "ok": true }`. `404` when no question is pending, `400` without ids. Questions have no side effects, so they can be answered through Mux Cloud even when `cloud.allowRemoteToolApproval` is false. |
+| GET | `/v1.0/api/chat/capabilities` | key | What this caller may do about tool approvals: `{ "ToolApprovals", "AutoApproveTools", "Relayed", "Reason" }`. `Reason` is `remote_approval_off` (relayed while `cloud.allowRemoteToolApproval` is false), `read_only` (the hub has no interactive approvals: no `--allow-tools` and no Mux Cloud connection), or empty. The dashboard uses it to enable its **Auto-approve tools** switch. |
 | GET | `/v1.0/api/settings` | key | Editable settings subset, **secrets masked** (`rest.apiKeySet` instead of the key). |
-| PUT | `/v1.0/api/settings` | key | Update settings (validated/clamped, written to `settings.json`). The REST API key changes only when a non-blank `rest.apiKey` is supplied. |
+| PUT | `/v1.0/api/settings` | key | Update settings (validated/clamped, written to `settings.json`). The body may name only the fields to change: it is merged onto the current settings (names matched without regard to case, `Rest` and `Cloud` merged field by field), so omitted fields keep their values. The REST API key changes only when a non-blank `rest.apiKey` is supplied. Settings include `SystemPromptPath`, `MaxTokenBudget`, `ContextWindowSafetyMarginPercent`, `TokenEstimationRatio`, `SkillRefreshIntervalSeconds`, `SkillsDirectory`, and `TelemetryEnabled`. |
 | GET | `/v1.0/api/usage/summary` | key | Window KPI summary. Query: `from`/`to` (epoch ms) or `range=hour\|day\|week\|month\|quarter\|year\|all` (quarter = 91 days, year = 52 weeks, all = no window), plus `endpoint`, `model`, `callKind`, `session`, `label` (comma-separated), `tag` (comma-separated `key:value`). Label/tag filters resolve to the sessions carrying them (query-time join) and compose with AND. Returns `{ FromUnixMs, ToUnixMs, Metrics }`. |
 | GET | `/v1.0/api/usage/timeseries` | key | Dense, evenly-spaced series for charting. Granularity is derived from the range — hour = 60×1-min, day = 96×15-min, week = 84×2-hour, month = 60×12-hour, quarter = 91×1-day, year = 52×1-week, all = from the oldest matching event to now in about 90 buckets of a nice width (1 min up to 1 week; the day grid when there are no events) — and empty slices are zero-filled. Explicit `from`/`to` get about 90 buckets. Each bucket's `Calls` and `Errors` drive the calls-by-outcome chart. Returns `{ Items: [ { BucketStartUnixMs, Metrics } ], Count }`. |
 | GET | `/v1.0/api/usage/timeseries/split` | key | The same buckets split by `dimension=model\|endpoint\|provider\|command\|callkind` (default `model`): one series per value, ranked by total tokens over the window, keeping the top `top` values (1–20, default 6) and folding the rest into one series keyed `Other` (`IsOther: true`; only when at least two values would be folded). Series stack to the totals. Buckets carry totals and timing means, not percentiles. `label`/`tag` (a session can carry several) and unknown dimensions return 400. Returns `{ Items: [ { Key, IsOther, Buckets: [ { BucketStartUnixMs, Metrics } ] } ], Count }`. |
@@ -153,8 +166,8 @@ All paths are versioned under `/v1.0/api`.
 | GET | `/v1.0/api/usage/filters` | key | Distinct `Endpoints`/`Models`/`Labels`/`Tags` for filter controls plus `{ Enabled }` (false when telemetry is off). |
 | GET | `/v1.0/api/usage/pricing` | key | The model pricing table from `pricing.json` (`{ version, models }`). |
 | PUT | `/v1.0/api/usage/pricing` | key | Replace the pricing table. Returns the saved table. |
-| GET | `/v1.0/api/runs` | key | List active and recently-finished runs as summaries (most-recently-started first). Returns `{ Items: [ { RunId, SessionId, EndpointName, Model, Status, IsTerminal, StartedUtc, CompletedUtc } ], Count }`. Terminal runs are retained ~5 minutes for inspection, then evicted. |
-| GET | `/v1.0/api/runs/{runId}` | key | Inspect one run: status, counters, current tool, last error, and the task-plan checklist. `404` when the run is unknown or evicted. |
+| GET | `/v1.0/api/runs` | key | List active and recently-finished runs as summaries (most-recently-started first). Returns `{ Items: [ { RunId, SessionId, EndpointName, Model, Status, IsTerminal, StartedUtc, CompletedUtc, PendingApprovalCount, PendingQuestionCount } ], Count }`. Terminal runs are retained ~5 minutes for inspection, then evicted. |
+| GET | `/v1.0/api/runs/{runId}` | key | Inspect one run: `{ RunId, SessionId, EndpointName, Model, Status, IsTerminal, StartedUtc, CompletedUtc, IterationsCompleted, ToolCallCount, ErrorCount, InputTokens, OutputTokens, TotalTokens, FinalEstimatedTokens, CurrentToolName, LastError, TotalTaskCount, CompletedTaskCount, Tasks: [ { Id, Title, Status } ], PendingApprovalCount, PendingQuestionCount }`. `Status` is `running`, `awaiting_approval`, `completed`, `failed`, or `canceled`, and reads `awaiting_approval` while an approval or a question is pending. `404` when the run is unknown or evicted. |
 | POST | `/v1.0/api/runs/{runId}/cancel` | key | Cooperatively cancel a run (trips its cancellation token; publishes a terminal `run_completed` with status `canceled` to stream subscribers). `200` `{ Ok, RunId, Status }` on success; `404` when the run is unknown or already finished. |
 | GET | `/dashboard` | none¹ | The web dashboard (HTML). |
 | GET | `/v1.0/ws` | key² | Live per-run event stream — subscribe by run or session id and replay + tail the canonical event envelope. See [WebSocket](#websocket). |
@@ -232,7 +245,9 @@ an unknown name a 404. These are the same operations as `mux worktree` and `/wor
 ## Web dashboard
 
 `GET /dashboard` serves a self-contained single-page dashboard (no external assets — CSS/JS/logos are
-inlined). It provides:
+inlined). Links can open a specific place: `/dashboard?session=<id>` or `/dashboard#session=<id>` opens that
+conversation in Chat (an unknown id leaves the normal view), and `/dashboard#settings` (or any other view name)
+opens that view. Mux Cloud uses the session link to open a machine's conversation. It provides:
 
 - **Chat** — chat over any configured endpoint (endpoint picker, message bubbles, markdown + code blocks,
   new-chat), with a per-message **(i)** hover showing time-to-first-token, streaming time, and token counts.
@@ -298,91 +313,44 @@ Health response:
 
 ## WebSocket
 
-Connect to `ws://127.0.0.1:<port>/v1.0/ws` (add `?apiKey=<key>` when a key is configured — see footnote ²).
-The server sends a first text frame:
+The WebSocket endpoint `/v1.0/ws` (run streaming and mirroring, session and list notifications, tool approvals,
+and the producer `publish` path) is documented in full in [WEBSOCKETS_API.md](../WEBSOCKETS_API.md). Tool approvals
+are emitted on the run stream as `approval_requested` and `approval_resolved` frames, and an `approve` frame
+resolves the run named by its `runId`.
 
-```json
-{ "eventType": "server.connected", "product": "mux", "version": "0.12.0" }
-```
+## Workspaces
 
-**Subscribe to a run.** Send a subscribe frame naming a run id (from the chat stream's `run` event):
+`GET /v1.0/api/workspaces` suggests working directories for a new conversation: the directories recent sessions ran
+in (most recently used first, each with `Path`, `Name`, `Source: "recent"`, `LastUsedUtc`, `SessionCount`), then the
+user's home directory (`Source: "home"`). Any existing directory can be passed as `WorkingDirectory` to
+`POST /v1.0/api/chat/stream`; a directory that does not exist returns 400. An open conversation keeps the directory
+it started in. `GET /v1.0/api/sessions` and `GET /v1.0/api/sessions/detail` include each session's
+`WorkingDirectory` (empty when none was recorded).
 
-```json
-{ "action": "subscribe", "runId": "8b2f…" }
-```
+## Mux Cloud
 
-The bridge replays the events the run has already emitted, then live-tails the rest, framing each as the
-**canonical event envelope** — byte-for-byte the same `eventType` shape that `mux print --output-format jsonl`
-emits (`run_started`, `assistant_text`, `assistant_thinking`, `tool_call_proposed`, `tool_call_completed`,
-`context_compacted`, `task_plan_updated`, `hook`, `error`, `run_completed`). A run-scoped subscription closes the
-socket when the run reaches a terminal state. A subscribe frame for an unknown **run** id returns an `error`
-frame with code `not_found`.
+| Route | Purpose |
+|---|---|
+| `GET /v1.0/api/cloud/status` | The machine's Mux Cloud status: `State` and `StateName` (both the enum name: `Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut`, `Revoked`), `StateKey` (what users see: `not_signed_in`, `off`, `connecting`, `connected`, `reconnecting`, `signed_out`, `removed`), `StateLabel` (English label for `StateKey`), `Reason` (English, with detail), `ReasonCode` (stable code for `Reason`, or empty: `not_signed_in`, `turned_off`, `agent_not_running`, `another_process`, `not_hosted_here`, `clock_skew`, `credential_rejected`, `removed`, `upgrade_required`, `unreachable`, `connection_dropped`, `heartbeat_timeout`, `replaced`, `server_restarting`, `rate_limited`, `handshake_rejected`), `ServerUrl`, `MachineId`, `MachineName`, `AccountEmail`, `AllowRemoteToolApproval`, `HostedHere`, `ConnectionId`, `ConnectedUtc`, `LatencyMs`, `RetryInSeconds`. |
+| `POST /v1.0/api/cloud/login` | Body `{ "Email", "Password", "ServerUrl"?, "MachineName"? }`. Exchanges the credentials for a machine credential (the password is sent to Mux Cloud once and never stored), connects, and returns the status. 400 for a missing field or a refusal, 401 for wrong credentials, 502 when Mux Cloud cannot be reached. |
+| `POST /v1.0/api/cloud/logout` | Signs the machine out of Mux Cloud first (best effort: the cloud revokes it, see the cloud's `POST /v1.0/api/machines/sign-out`), then deletes the machine credential, turns the connection off, and returns the status. The local sign-out happens even when the cloud cannot be reached. |
 
-The `run_completed` envelope can include `modelCallCount` when statistics are enabled:
-the number of primary model calls started by the run, excluding internal transport retries,
-compaction, and title generation. This is distinct from `iterationsCompleted`, since a budget
-check can stop an iteration before a model call. Older or synthetic events may omit the field;
-consumers should treat omission as unknown, not zero. Token usage totals accumulate across
-the run's primary calls and are distinct from `finalEstimatedTokens` (the estimated context size).
-Two optional, nonnegative millisecond fields carry model timing when statistics are enabled:
-`firstModelCallTtftMs` is request-start to first token for the first primary call, excluding
-preparation; `modelStreamingMs` sums first-token-to-last-token durations across all primary calls,
-excluding tools and approval waits. The first is omitted if the first call has no timing; the second
-is omitted if any call has no streaming timing. Both are omitted when no model call ran. Zero is a
-valid reported duration. These fields are independent of `durationMs`, the agent run's wall-clock time.
+`GET /v1.0/api/settings` includes a `Cloud` block (`Enabled`, `ServerUrl`, `MachineName`, `MachineId`,
+`AccountEmail`, `MachineSecretSet`, `AllowRemoteToolApproval`, `HeartbeatSeconds`, `ReconnectMaxDelaySeconds`,
+`AllowInvalidCertificates`). The machine secret is never returned. `PUT /v1.0/api/settings` applies every field
+except the credential.
 
-**Subscribe to a session** (what "mirror on by default" uses). Name a `sessionId` instead of a `runId`:
+### Relayed requests
 
-```json
-{ "action": "subscribe", "sessionId": "9f1c…" }
-```
+Requests that arrive through the Mux Cloud tunnel are forwarded to this API by the machine itself, with the local
+API key and two headers:
 
-The bridge attaches to any run already in flight for that session and to future runs as they start, streaming
-each run's frames. It does **not** error when the session is currently idle — the socket stays open and the
-next run for the session streams in the moment it begins. This lets a surface subscribe when a conversation is
-opened and simply see whatever run happens there, from any surface.
+| Header | Value | Effect |
+|---|---|---|
+| `X-Mux-Relay` | `cloud` | The request came through Mux Cloud. The dashboard page renders without the local API key. When `cloud.allowRemoteToolApproval` is false, chat runs deny tools that would prompt, and `POST /v1.0/api/chat/approve` and WebSocket `approve` frames return 403 / `forbidden`. `autoApproveTools` on a relayed chat run is ignored in that case. |
+| `X-Mux-Base-Path` | `/m/{machineId}` | The dashboard builds every API and WebSocket URL under this prefix so they route back through the cloud. Only letters, digits, `_`, `-`, and `/` are accepted. |
 
-**Publish a run** (how a surface that runs the engine in its own process — the desktop app, the terminal —
-feeds the hub so others can mirror it). Send `publish` frames; the first materializes the run in the hub's
-registry, and each carries one pre-serialized canonical envelope:
-
-```json
-{ "action": "publish", "runId": "8b2f…", "sessionId": "9f1c…", "endpointName": "openai-gpt4o",
-  "model": "gpt-4o", "frame": "{\"eventType\":\"assistant_text\",\"text\":\"…\"}" }
-```
-
-**Signal a transcript change** (how an in-process surface tells others to reload an open conversation without
-streaming a whole run through the hub). After persisting a turn to the shared store, send:
-
-```json
-{ "action": "notify-transcript", "sessionId": "9f1c…" }
-```
-
-The hub broadcasts a `transcript_changed` event (`{ "eventType": "transcript_changed", "sessionId": "9f1c…" }`)
-to every session-scoped subscriber of that id, and refreshes the conversation list too. `transcript_changed`
-is the message-level counterpart to the list-level `sessions_changed`: a surface viewing the conversation
-reloads its transcript on it, exactly as it does on `run_completed`. The server fires it automatically on every
-turn persist (a streamed run and the `PUT /v1.0/api/sessions` upsert) **and whenever any process changes a
-session file on disk** — the server watches the session-store directory, so a turn written straight to the
-shared store by an in-process terminal or desktop run (or by a second server) is rebroadcast to this server's
-subscribers too. A viewer therefore reloads whether or not the writer drove a run through this hub, and even
-when the writer is on a different hub that shares the same store.
-
-**Answer an approval over the socket.** When the server runs with `--allow-tools`, a proposed mutating tool
-raises an `approval_required`/`tool_call_proposed` event; answer it on the same socket:
-
-```json
-{ "action": "approve", "runId": "8b2f…", "toolCallId": "call_1", "decision": "y" }
-```
-
-`decision` is `y` (approve once), `always` (approve and remember), or `n` (deny). This resolves the same
-pending approval the `POST /v1.0/api/chat/approve` route does.
-
-**Mirroring runs started elsewhere.** The registry the bridge reads is a `Mux.Core` type a host process can
-share. The desktop app records its in-process runs into the registry its embedded server exposes, so
-subscribing by that run's session id mirrors a desktop run live. Consumers ship on every surface:
-`mux mirror <sessionId>` (terminal), `/mirror <sessionId>` (dashboard), and *Mirror a session's live run*
-(VS Code).
+Everything else behaves exactly as for a local caller.
 
 ## Security posture
 

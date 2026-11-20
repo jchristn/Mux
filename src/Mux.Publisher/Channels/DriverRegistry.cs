@@ -23,6 +23,7 @@ namespace Mux.Publisher.Channels
                 ["winget"] = () => new WingetDriver(),
                 ["chocolatey"] = () => new ChocolateyDriver(),
                 ["dmg"] = () => new DmgDriver(),
+                ["pkg"] = () => new PkgDriver(),
                 ["debrpm"] = () => new DebRpmDriver(),
                 ["appimage"] = () => new AppImageDriver(),
                 ["apt"] = () => new AptRepoDriver(),

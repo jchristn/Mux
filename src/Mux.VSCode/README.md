@@ -9,8 +9,6 @@ loop, tools, approvals, and session store stay in mux itself. Your editor sessio
 terminal UI and desktop app show, because they read the same store. A conversation you start here resumes
 there, and one you start there opens here.
 
-> Beta. Tracks the mux `contractVersion` API and may change alongside it.
-
 Dedicated **Ollama Cloud** (`ollama-cloud`) and **xAI Grok** (`xai`) providers are available in the endpoint editor, including bearer API keys and environment-variable references.
 
 ## Requirements

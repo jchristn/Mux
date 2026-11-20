@@ -93,7 +93,7 @@ namespace Mux.Cli.App
             _Adapter = new RadioGroup(_Adapters);
             _BaseUrl = new TextField();
             _Model = new TextField();
-            _ApiKey = new TextField();
+            _ApiKey = SecretFields.Create();
             _AuthPlacement = new TextField();
             _AuthParameterName = new TextField();
             _Region = new TextField { Value = source.Region ?? string.Empty };
@@ -270,7 +270,9 @@ namespace Mux.Cli.App
             }
             else
             {
-                surface.DrawText(contentX, hintRow, Trim("Tab/↑↓ move · Space toggle · Enter save · Esc cancel", contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
+                string? reveal = SecretFields.Hint(_Form.FocusedLeaf, "key");
+                string hint = reveal == null ? "Tab/↑↓ move · Space toggle · Enter save · Esc cancel" : "Tab/↑↓ move · " + reveal + " · Enter save · Esc cancel";
+                surface.DrawText(contentX, hintRow, Trim(hint, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
             }
         }
 

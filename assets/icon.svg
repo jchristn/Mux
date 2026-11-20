@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <title>mux</title>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1d2739"/>
+      <stop offset="1" stop-color="#080d1a"/>
+    </linearGradient>
+  </defs>
+  <rect x="102" y="102" width="820" height="820" rx="185" fill="url(#bg)"/>
+  <g shape-rendering="crispEdges">
+  <rect x="232" y="438.316" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="379.369" y="438.316" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="467.79" y="438.316" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="556.211" y="438.316" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="644.632" y="438.316" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="733.053" y="438.316" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="232" y="467.79" width="88.4211" height="29.4737" fill="#4ade80"/>
+  <rect x="349.895" y="467.79" width="88.4211" height="29.4737" fill="#4ade80"/>
+  <rect x="467.79" y="467.79" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="556.211" y="467.79" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="644.632" y="467.79" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="733.053" y="467.79" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="232" y="497.263" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="320.421" y="497.263" width="29.4737" height="29.4737" fill="#4ade80"/>
+  <rect x="379.369" y="497.263" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="467.79" y="497.263" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="556.211" y="497.263" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="674.106" y="497.263" width="88.4211" height="29.4737" fill="#4ade80"/>
+  <rect x="232" y="526.737" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="379.369" y="526.737" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="467.79" y="526.737" width="147.369" height="29.4737" fill="#4ade80"/>
+  <rect x="644.632" y="526.737" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="733.053" y="526.737" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="232" y="556.211" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="379.369" y="556.211" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="497.263" y="556.211" width="88.4211" height="29.4737" fill="#4ade80"/>
+  <rect x="644.632" y="556.211" width="58.9474" height="29.4737" fill="#4ade80"/>
+  <rect x="733.053" y="556.211" width="58.9474" height="29.4737" fill="#4ade80"/>
+  </g>
+</svg>

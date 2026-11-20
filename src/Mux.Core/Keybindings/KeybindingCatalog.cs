@@ -1,4 +1,4 @@
-namespace Mux.Desktop.Services
+namespace Mux.Core.Keybindings
 {
     using System;
     using System.Collections.Generic;
@@ -7,7 +7,7 @@ namespace Mux.Desktop.Services
     /// The default, front-end-agnostic list of bindable commands and their shipped chords. The ids and default
     /// chords mirror the TUI's command catalog (<c>MuxCommandCatalog</c>) so that overrides persisted to
     /// <c>keybindings.json</c> apply identically in the terminal and desktop front ends. This is data only — it
-    /// carries no handlers and no TUIKit dependency, which keeps it in <c>Mux.Desktop.Core</c> and testable.
+    /// carries no handlers and no UI dependency, which keeps it in <c>Mux.Core</c> where the desktop and the REST API share it.
     /// </summary>
     public static class KeybindingCatalog
     {

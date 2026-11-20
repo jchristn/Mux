@@ -49,6 +49,7 @@
   "cmd.manage.toggleSkill": "切换技能",
   "cmd.manage.editSettings": "编辑设置",
   "cmd.showHelp": "连接 mux 的帮助",
+  "cmd.cloud": "连接到 Mux Cloud",
   "cmd.about": "关于 mux",
   "cmd.manage.addPrompt": "添加提示词",
   "cmd.manage.editPrompt": "编辑提示词",

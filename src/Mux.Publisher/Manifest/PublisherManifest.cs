@@ -92,6 +92,30 @@ namespace Mux.Publisher.Manifest
         public string DisplayName { get; set; } = string.Empty;
 
         /// <summary>The <c>owner/repo</c> slug on GitHub.</summary>
+        /// <summary>
+        /// The reverse-DNS identifier every format derives from (macOS bundle and .pkg identifier, LaunchAgent
+        /// label prefix, Linux desktop and autostart entry names), for example <c>ai.latticetech.mux</c>.
+        /// Defaults to <c>ai.latticetech.&lt;name&gt;</c>.
+        /// </summary>
+        [JsonPropertyName("identifier")]
+        public string Identifier { get; set; } = string.Empty;
+
+        /// <summary>A one-line tagline shown on installer welcome pages and in package descriptions.</summary>
+        [JsonPropertyName("tagline")]
+        public string Tagline { get; set; } = string.Empty;
+
+        /// <summary>The publisher shown to users (Inno AppPublisher, package vendor, copyright).</summary>
+        [JsonPropertyName("publisher")]
+        public string Publisher { get; set; } = string.Empty;
+
+        /// <summary>The publisher's URL (Inno AppPublisherURL).</summary>
+        [JsonPropertyName("publisherUrl")]
+        public string PublisherUrl { get; set; } = string.Empty;
+
+        /// <summary>The package maintainer, as <c>Name &lt;email&gt;</c> (.deb/.rpm).</summary>
+        [JsonPropertyName("maintainer")]
+        public string Maintainer { get; set; } = string.Empty;
+
         [JsonPropertyName("repo")]
         public string Repo { get; set; } = string.Empty;
 
@@ -106,6 +130,26 @@ namespace Mux.Publisher.Manifest
         /// <summary>SPDX license identifier.</summary>
         [JsonPropertyName("license")]
         public string License { get; set; } = string.Empty;
+
+        /// <summary>The identifier, or <c>ai.latticetech.&lt;name&gt;</c> when none is set.</summary>
+        [JsonIgnore]
+        public string EffectiveIdentifier => string.IsNullOrWhiteSpace(Identifier) ? "ai.latticetech." + (Name ?? string.Empty).ToLowerInvariant() : Identifier;
+
+        /// <summary>The publisher, or <c>Lattice AI, LLC</c> when none is set.</summary>
+        [JsonIgnore]
+        public string EffectivePublisher => string.IsNullOrWhiteSpace(Publisher) ? "Lattice AI, LLC" : Publisher;
+
+        /// <summary>The publisher URL, or the project homepage when none is set.</summary>
+        [JsonIgnore]
+        public string EffectivePublisherUrl => string.IsNullOrWhiteSpace(PublisherUrl) ? Homepage : PublisherUrl;
+
+        /// <summary>The maintainer, or the publisher when none is set.</summary>
+        [JsonIgnore]
+        public string EffectiveMaintainer => string.IsNullOrWhiteSpace(Maintainer) ? EffectivePublisher : Maintainer;
+
+        /// <summary>The LaunchAgent label / autostart entry name for a bundled tray agent.</summary>
+        [JsonIgnore]
+        public string AgentIdentifier => EffectiveIdentifier + ".agent";
     }
 
     /// <summary>Build inputs: artifacts and the framework/runtime matrix.</summary>

@@ -276,7 +276,7 @@ namespace Mux.Server.Documentation
         /// <summary>Metadata for <c>POST /v1.0/api/chat/stream</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> ChatStream = m => Sec(Init(m, TagChat,
             "Run a streaming chat completion (SSE)",
-            "Runs a completion and streams the result as Server-Sent Events. Event names: `token` (a text delta), `thinking` (a reasoning delta), `tool` (a tool lifecycle event), `approval` (a tool-approval prompt, only when interactive tools are enabled), `done` (terminal, carries the final content and stats), and `error`. The request body is identical to `POST /v1.0/api/chat`. The response is `text/event-stream`, not JSON.",
+            "Runs a completion and streams the result as Server-Sent Events. Event names: `run` (the run and session ids, first), `token` (a text delta), `thinking` (a reasoning delta), `tool` (a tool lifecycle event; `Arguments` on `running`, the truncated `Result` when finished), `attachments` (what `@path` mentions attached or skipped), `compacted` (the context was compacted), `approval` (a tool-approval prompt, only when interactive tools are enabled), `ask_user` (a question for the user when the request set `AskUser`, answered with `POST /v1.0/api/chat/answer`), `plan` (a plan-mode proposal), `done` (terminal, carries the final content and stats), `canceled`, and `error`. The request body is identical to `POST /v1.0/api/chat`. The response is `text/event-stream`, not JSON.",
             operationId: "chatStream"))
             .WithRequestBody(Body("ChatRequest", "The endpoint and conversation to run."))
             .WithResponse(200, new OpenApiResponseMetadata
@@ -290,6 +290,111 @@ namespace Mux.Server.Documentation
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized());
 
+        /// <summary>Metadata for <c>POST /v1.0/api/chat/answer</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ChatAnswer = m => Sec(Init(m, TagChat,
+            "Answer an ask_user question",
+            "Resolves an `ask_user` event raised during a streaming run started with `AskUser: true`: pick choice labels in `Answers`, give free text in `Other`, or set `Skip`. Unanswered questions time out after 15 minutes and the model continues with a default. Questions have no side effects, so they are answerable through Mux Cloud even when remote tool approval is off.",
+            operationId: "chatAnswer"))
+            .WithRequestBody(Body("ChatAnswerRequest", "The answer."))
+            .WithResponse(200, RespJson("The answer was delivered.", Obj(new Dictionary<string, M> { ["ok"] = Pbool("Always true on success.") }, new Dictionary<string, object?> { ["ok"] = true })))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, RespJson("No pending question matched the run and question id.", Ref("ApiError")));
+
+        /// <summary>Metadata for <c>POST /v1.0/api/sessions/{id}/compact</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SessionCompact = m => Sec(Init(m, TagSessions,
+            "Compact a saved conversation",
+            "Summarizes the older turns of a saved conversation with the model (the `/compact` command) and saves the shorter history. The body is optional; `Endpoint` picks the model, else the session's endpoint, else the default. Returns 409 while a run for the session is in progress.",
+            operationId: "compactSession"))
+            .WithRequestBody(Body("SessionCompactRequest", "Optional: the endpoint that writes the summary."))
+            .WithResponse(200, Ok("SessionCompactResult"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound())
+            .WithResponse(409, RespJson("A run for the session is in progress.", Ref("ApiError")))
+            .WithResponse(502, RespJson("The model failed to write the summary.", Ref("ApiError")));
+
+        /// <summary>Metadata for <c>GET /v1.0/api/processes</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ProcessesList = m => Sec(Init(m, TagRuns,
+            "List background processes",
+            "The background processes the model started with `process_start` (dev servers, watchers), running and exited (the `/processes` command).",
+            operationId: "listProcesses"))
+            .WithResponse(200, OkList("BackgroundProcessInfo"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/processes/{id}/output</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ProcessesOutput = m => Sec(Init(m, TagRuns,
+            "Read a background process's recent output",
+            "The tail of the process's output buffer. `chars` (query, default 4000, at most 200000) limits the size.",
+            operationId: "getProcessOutput"))
+            .WithParameter(Query("chars", "How many trailing characters to return.", false, M.String()))
+            .WithResponse(200, Ok("ProcessOutputDto"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/processes/{id}/stop</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ProcessesStop = m => Sec(Init(m, TagRuns,
+            "Stop a background process",
+            "Stops the process (its whole process tree) and returns its final output. The id `all` stops every running process and returns `{ \"Stopped\": n }`.",
+            operationId: "stopProcess"))
+            .WithResponse(200, Ok("BackgroundProcessOutput"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
+        /// <summary>Metadata for <c>DELETE /v1.0/api/processes</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ProcessesClear = m => Sec(Init(m, TagRuns,
+            "Clear exited background processes",
+            "Removes processes that have exited from the list. Returns `{ \"Removed\": n }`.",
+            operationId: "clearProcesses"))
+            .WithResponse(200, RespJson("How many were removed.", Obj(new Dictionary<string, M> { ["Removed"] = Pint("Processes removed.") }, new Dictionary<string, object?> { ["Removed"] = 2 })))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/trust</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> TrustGet = m => Sec(Init(m, TagSkills,
+            "Read project trust",
+            "The trust decision for the project containing `workingDirectory` (the `/trust` command), which gates the project's checked-in skills that run commands.",
+            operationId: "getTrust"))
+            .WithParameter(Query("workingDirectory", "A directory inside the project. Defaults to the server's current directory.", false, M.String()))
+            .WithResponse(200, Ok("ProjectTrustDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>PUT /v1.0/api/trust</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> TrustPut = m => Sec(Init(m, TagSkills,
+            "Set project trust",
+            "Records `all`, `playbooks`, or `ignore` for the project containing `WorkingDirectory`; `reset` removes the decision.",
+            operationId: "setTrust"))
+            .WithRequestBody(Body("ProjectTrustRequest", "The directory and level."))
+            .WithResponse(200, Ok("ProjectTrustDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/search</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SearchGet = m => Sec(Init(m, TagSettings,
+            "Read web search settings",
+            "Whether web search is on, whether providers fall back, and the providers. API keys are never returned; `ApiKeySet` reports whether one is stored.",
+            operationId: "getSearch"))
+            .WithResponse(200, Ok("SearchSettingsDto"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>PUT /v1.0/api/search</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SearchPut = m => Sec(Init(m, TagSettings,
+            "Replace web search settings",
+            "Saves the whole search configuration. Providers left out are removed; a provider sent with a blank `ApiKey` keeps the key stored under the same name. The first enabled provider becomes the default when none is marked.",
+            operationId: "putSearch"))
+            .WithRequestBody(Body("SearchSettingsDto", "The search settings."))
+            .WithResponse(200, Ok("SearchSettingsDto"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>DELETE /v1.0/api/search/providers/{name}</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> SearchProviderDelete = m => Sec(Init(m, TagSettings,
+            "Delete a web search provider",
+            "Removes the named provider and returns the updated settings.",
+            operationId: "deleteSearchProvider"))
+            .WithResponse(200, Ok("SearchSettingsDto"))
+            .WithResponse(401, Unauthorized())
+            .WithResponse(404, NotFound());
+
         /// <summary>Metadata for <c>POST /v1.0/api/chat/approve</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> ChatApprove = m => Sec(Init(m, TagChat,
             "Answer a tool-approval prompt",
@@ -300,6 +405,14 @@ namespace Mux.Server.Documentation
             .WithResponse(400, BadRequest())
             .WithResponse(401, Unauthorized())
             .WithResponse(404, RespJson("No pending approval matched the run and tool-call id.", Ref("ApiError")));
+
+        /// <summary>Metadata for <c>GET /v1.0/api/chat/capabilities</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> ChatCapabilitiesGet = m => Sec(Init(m, TagChat,
+            "Tool-approval capabilities for this caller",
+            "Reports whether tool calls that need approval prompt this caller (`ToolApprovals`) and whether it may ask runs to auto-approve them (`AutoApproveTools`). A request relayed through Mux Cloud while `cloud.allowRemoteToolApproval` is false gets `false` for both with `Reason` `remote_approval_off`; a hub without interactive approvals reports `read_only`. Chat runs enforce the same rule.",
+            operationId: "getChatCapabilities"))
+            .WithResponse(200, Ok("ChatCapabilities"))
+            .WithResponse(401, Unauthorized());
 
         /// <summary>Metadata for <c>POST /v1.0/api/model/load</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> ModelLoad = m => Sec(Init(m, TagChat,
@@ -320,6 +433,40 @@ namespace Mux.Server.Documentation
             "Returns saved conversations as summaries, most-recently-updated first. Sessions are shared across the terminal UI, desktop app, web dashboard, and VS Code extension.",
             operationId: "listSessions"))
             .WithResponse(200, OkList("SessionSummary"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/cloud/status</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> CloudStatusGet = m => Sec(Init(m, TagSettings,
+            "Mux Cloud connection status",
+            "Returns this machine's Mux Cloud tunnel status: `State` is one of `Disabled`, `Connecting`, `Connected`, `Reconnecting`, `SignedOut`, or `Revoked`, with the reason, server URL, machine name, account email, and whether remote tool approval is allowed.",
+            operationId: "getCloudStatus"))
+            .WithResponse(200, Ok("CloudStatus"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/cloud/login</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> CloudLogin = m => Sec(Init(m, TagSettings,
+            "Sign this machine in to Mux Cloud",
+            "Exchanges a Mux Cloud email and password for a machine credential (saved in settings.json under `cloud`; the password is never stored) and connects the tunnel. Anyone signed in to the account can then use this machine remotely, including approving tools unless `cloud.allowRemoteToolApproval` is false.",
+            operationId: "cloudLogin"))
+            .WithRequestBody(Body("CloudLoginRequestDto", "The Mux Cloud credentials."))
+            .WithResponse(200, Ok("CloudStatus"))
+            .WithResponse(400, BadRequest())
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>POST /v1.0/api/cloud/logout</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> CloudLogout = m => Sec(Init(m, TagSettings,
+            "Sign this machine out of Mux Cloud",
+            "Deletes the machine credential, turns the connection off, and closes the tunnel.",
+            operationId: "cloudLogout"))
+            .WithResponse(200, Ok("CloudStatus"))
+            .WithResponse(401, Unauthorized());
+
+        /// <summary>Metadata for <c>GET /v1.0/api/workspaces</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> WorkspacesGet = m => Sec(Init(m, TagSessions,
+            "Suggest working directories",
+            "Returns working-directory suggestions for a new conversation: the directories recent sessions ran in, most recently used first, then the user's home directory. Any existing directory may be passed as `WorkingDirectory` to `POST /v1.0/api/chat/stream`; these are only suggestions.",
+            operationId: "listWorkspaces"))
+            .WithResponse(200, OkList("WorkspaceDto"))
             .WithResponse(401, Unauthorized());
 
         /// <summary>Metadata for <c>GET /v1.0/api/sessions/detail</c>.</summary>
@@ -593,6 +740,14 @@ namespace Mux.Server.Documentation
             .WithResponse(401, Unauthorized());
 
         // --- Keybindings ---
+
+        /// <summary>Metadata for <c>GET /v1.0/api/keybindings</c>.</summary>
+        public static readonly Action<OpenApiRouteMetadata> KeybindingCommandsGet = m => Sec(Init(m, TagKeybindings,
+            "List bindable commands",
+            "Every bindable command with its title, category, shipped default chord, the chord in effect after overrides, and whether it is overridden.",
+            operationId: "listKeybindingCommands"))
+            .WithResponse(200, OkList("KeybindingCommandDto"))
+            .WithResponse(401, Unauthorized());
 
         /// <summary>Metadata for <c>GET /v1.0/api/keybindings</c>.</summary>
         public static readonly Action<OpenApiRouteMetadata> KeybindingsGet = m => Sec(Init(m, TagKeybindings,
@@ -1188,12 +1343,50 @@ namespace Mux.Server.Documentation
                 ["Model"] = Pstr("Model captured with the session."),
                 ["CreatedUtc"] = Pstr("UTC creation time.", "date-time"),
                 ["UpdatedUtc"] = Pstr("UTC last-updated time.", "date-time"),
-                ["MessageCount"] = Pint("Number of messages in the conversation.")
+                ["MessageCount"] = Pint("Number of messages in the conversation."),
+                ["WorkingDirectory"] = Pstr("The working directory the session's tools run in (empty when none was recorded).")
             }, new Dictionary<string, object?>
             {
                 ["Id"] = "9f1c…", ["Title"] = "Refactor the auth module", ["EndpointName"] = "openai-gpt4o",
-                ["Model"] = "gpt-4o", ["MessageCount"] = 8
+                ["Model"] = "gpt-4o", ["MessageCount"] = 8, ["WorkingDirectory"] = "/src/app"
             });
+
+            s["CloudLoginRequestDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Email"] = Pstr("Account email."),
+                ["Password"] = Pstr("Account password (sent once, never stored)."),
+                ["ServerUrl"] = PstrNullable("Mux Cloud URL; null keeps the configured one (default https://app.usemux.ai)."),
+                ["MachineName"] = PstrNullable("Display name; null uses the configured name or the host name.")
+            }, new Dictionary<string, object?> { ["Email"] = "you@example.com", ["Password"] = "********" });
+
+            s["CloudStatus"] = Obj(new Dictionary<string, M>
+            {
+                ["State"] = Pstr("Disabled, Connecting, Connected, Reconnecting, SignedOut, or Revoked."),
+                ["StateName"] = Pstr("The state name (enum name, kept for compatibility)."),
+                ["StateKey"] = Pstr("What users see: not_signed_in, off, connecting, connected, reconnecting, signed_out, or removed."),
+                ["StateLabel"] = Pstr("English label for StateKey, for example Not signed in."),
+                ["Reason"] = Pstr("Why the connection is in this state (English, with detail), or empty."),
+                ["ReasonCode"] = Pstr("Stable code for Reason (for example clock_skew, unreachable, credential_rejected), or empty."),
+                ["ServerUrl"] = Pstr("Mux Cloud server URL."),
+                ["MachineId"] = Pstr("Enrolled machine id, or empty."),
+                ["MachineName"] = Pstr("Machine display name."),
+                ["AccountEmail"] = Pstr("Account email, or empty."),
+                ["AllowRemoteToolApproval"] = Pbool("Whether remote users may approve tools."),
+                ["HostedHere"] = Pbool("Whether this process runs the tunnel."),
+                ["ConnectionId"] = Pstr("Current connection id, or empty."),
+                ["ConnectedUtc"] = PstrNullable("When the current connection was accepted (UTC)."),
+                ["LatencyMs"] = PstrNullable("Last heartbeat round trip in milliseconds."),
+                ["RetryInSeconds"] = PstrNullable("Seconds until the next reconnect attempt.")
+            }, new Dictionary<string, object?> { ["State"] = "Connected", ["StateName"] = "Connected", ["StateKey"] = "connected", ["StateLabel"] = "Connected", ["Reason"] = "", ["ReasonCode"] = "", ["ServerUrl"] = "https://app.usemux.ai", ["MachineId"] = "mch_01JD3M5ZK7T2R8W4Q6Y9P3N1A0", ["MachineName"] = "studio-mac", ["AccountEmail"] = "you@example.com", ["AllowRemoteToolApproval"] = true, ["HostedHere"] = true });
+
+            s["WorkspaceDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Path"] = Pstr("Absolute directory path."),
+                ["Name"] = Pstr("The folder name, for display."),
+                ["Source"] = Pstr("`recent` (a saved session ran there) or `home`."),
+                ["LastUsedUtc"] = PstrNullable("Most recent session update in this directory (UTC); null for the home directory."),
+                ["SessionCount"] = Pint("Number of saved sessions that ran in this directory.")
+            }, new Dictionary<string, object?> { ["Path"] = "/src/app", ["Name"] = "app", ["Source"] = "recent", ["LastUsedUtc"] = "2026-11-17T12:00:00Z", ["SessionCount"] = 3 });
 
             s["ChatToolCallDto"] = Obj(new Dictionary<string, M>
             {
@@ -1213,12 +1406,23 @@ namespace Mux.Server.Documentation
             }, new Dictionary<string, object?> { ["Role"] = "user", ["Content"] = "Explain this function." },
                new List<string> { "Role", "Content" }, "A single chat message. Tool-call structure is preserved across surfaces.");
 
+            s["ChatCapabilities"] = Obj(new Dictionary<string, M>
+            {
+                ["ToolApprovals"] = Pbool("Whether tool calls that need approval prompt this caller."),
+                ["AutoApproveTools"] = Pbool("Whether this caller may set `AutoApproveTools` on a chat run."),
+                ["Relayed"] = Pbool("Whether the request came through the Mux Cloud relay."),
+                ["Reason"] = Pstr("`remote_approval_off`, `read_only`, or empty when approvals are available.")
+            }, new Dictionary<string, object?> { ["ToolApprovals"] = true, ["AutoApproveTools"] = true, ["Relayed"] = false, ["Reason"] = "" });
+
             s["ChatRequest"] = Obj(new Dictionary<string, M>
             {
                 ["Endpoint"] = Pstr("Configured endpoint name to run against."),
                 ["Id"] = PstrNullable("Optional conversation/session id, used to tag usage telemetry."),
                 ["WorkingDirectory"] = PstrNullable("Optional working directory the run's tools resolve paths against. Must exist when set."),
-                ["Messages"] = Parr(Ref("ChatMessageDto"), "The conversation so far, including the new user turn.")
+                ["Messages"] = Parr(Ref("ChatMessageDto"), "The conversation so far, including the new user turn."),
+                ["PlanMode"] = Pbool("Run the turn in plan mode (read-only tools, ending with a plan)."),
+                ["AutoApproveTools"] = Pbool("Run tools that would prompt for approval without asking. Honored only when this caller may approve tools (see `GET /v1.0/api/chat/capabilities`)."),
+                ["AskUser"] = Pbool("The client can answer `ask_user` questions: the run streams `ask_user` events and waits for `POST /v1.0/api/chat/answer`. Without it the model is told no user is available.")
             }, new Dictionary<string, object?>
             {
                 ["Endpoint"] = "openai-gpt4o",
@@ -1275,6 +1479,7 @@ namespace Mux.Server.Documentation
                 ["Title"] = Pstr("Session title."),
                 ["EndpointName"] = Pstr("Endpoint name captured with the session."),
                 ["Model"] = Pstr("Model captured with the session."),
+                ["WorkingDirectory"] = Pstr("The working directory the session's tools run in (empty when none was recorded)."),
                 ["Messages"] = Parr(Ref("ChatMessageDto"), "The conversation messages, oldest first.")
             }, new Dictionary<string, object?>
             {
@@ -1595,6 +1800,20 @@ namespace Mux.Server.Documentation
                 ["ErrorMessage"] = PstrNullable("Failure message.")
             });
 
+            s["CloudSettingsDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Enabled"] = Pbool("Whether this machine connects to Mux Cloud (effective once signed in)."),
+                ["ServerUrl"] = Pstr("Mux Cloud server URL."),
+                ["MachineName"] = PstrNullable("Machine display name; null uses the host name."),
+                ["MachineId"] = PstrNullable("Read only: enrolled machine id."),
+                ["AccountEmail"] = PstrNullable("Read only: account email."),
+                ["MachineSecretSet"] = Pbool("Read only: whether a machine secret is stored (never returned)."),
+                ["AllowRemoteToolApproval"] = Pbool("Whether remote users may approve tools on this machine."),
+                ["HeartbeatSeconds"] = Pint("Heartbeat interval in seconds (5-300)."),
+                ["ReconnectMaxDelaySeconds"] = Pint("Largest reconnect delay in seconds (5-3600)."),
+                ["AllowInvalidCertificates"] = Pbool("Accept invalid TLS certificates from a self-hosted server.")
+            }, new Dictionary<string, object?> { ["Enabled"] = true, ["ServerUrl"] = "https://app.usemux.ai", ["MachineName"] = "studio-mac", ["MachineId"] = "mch_01JD3M5ZK7T2R8W4Q6Y9P3N1A0", ["AccountEmail"] = "you@example.com", ["MachineSecretSet"] = true, ["AllowRemoteToolApproval"] = true, ["HeartbeatSeconds"] = 20, ["ReconnectMaxDelaySeconds"] = 60, ["AllowInvalidCertificates"] = false });
+
             s["SettingsDto"] = Obj(new Dictionary<string, M>
             {
                 ["ToolAutoApproveSeconds"] = Pint("Interactive approval countdown in seconds; zero disables."),
@@ -1613,7 +1832,15 @@ namespace Mux.Server.Documentation
                 ["IgnoreCertErrors"] = Pbool("Ignore TLS certificate errors."),
                 ["ShowBoundaryLines"] = Pbool("Show interactive boundary lines."),
                 ["DefaultEnqueueBehavior"] = Pstr("Default enqueue behavior."),
-                ["Rest"] = Ref("RestSettingsDto")
+                ["SystemPromptPath"] = PstrNullable("Custom system prompt file, or null for the built-in prompt."),
+                ["MaxTokenBudget"] = PintNullable("Per-run token budget, or null for none."),
+                ["ContextWindowSafetyMarginPercent"] = Pint("Percent of the context window kept free (5 to 50)."),
+                ["TokenEstimationRatio"] = Pnum("Characters per token for context estimates (2.0 to 6.0)."),
+                ["SkillRefreshIntervalSeconds"] = Pint("How often skills are rescanned, in seconds."),
+                ["SkillsDirectory"] = PstrNullable("Custom skills directory, or null for the default."),
+                ["TelemetryEnabled"] = Pbool("Whether OpenTelemetry export is on."),
+                ["Rest"] = Ref("RestSettingsDto"),
+                ["Cloud"] = Ref("CloudSettingsDto")
             }, new Dictionary<string, object?>
             {
                 ["DefaultApprovalPolicy"] = "ask", ["MaxAgentIterations"] = 256, ["MaxConcurrency"] = 3,
@@ -1963,12 +2190,118 @@ namespace Mux.Server.Documentation
                 ["Status"] = Pstr("Lifecycle status: `running`, `awaiting_approval`, `completed`, `failed`, or `canceled`."),
                 ["IsTerminal"] = Pbool("Whether the run has reached a terminal status."),
                 ["StartedUtc"] = Pstr("When the run started (UTC).", "date-time"),
-                ["CompletedUtc"] = new M { Type = "string", Format = "date-time", Nullable = true, Description = "When the run finished (UTC), or null while running." }
+                ["CompletedUtc"] = new M { Type = "string", Format = "date-time", Nullable = true, Description = "When the run finished (UTC), or null while running." },
+                ["PendingApprovalCount"] = Pint("Tool approvals waiting for a decision."),
+                ["PendingQuestionCount"] = Pint("ask_user questions waiting for an answer.")
             }, new Dictionary<string, object?>
             {
                 ["RunId"] = "8b2f…", ["SessionId"] = "9f1c…", ["EndpointName"] = "openai-gpt4o", ["Model"] = "gpt-4o",
                 ["Status"] = "running", ["IsTerminal"] = false, ["StartedUtc"] = "2026-09-15T12:00:00Z"
             });
+
+            s["ChatAnswerRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["RunId"] = Pstr("The run id from the `ask_user` event."),
+                ["QuestionId"] = Pstr("The question id from the `ask_user` event."),
+                ["Answers"] = Parr(Pstr("A choice label."), "The selected choice labels."),
+                ["Other"] = PstrNullable("A free-text answer."),
+                ["Skip"] = Pbool("True to skip the question.")
+            }, new Dictionary<string, object?> { ["RunId"] = "run_7", ["QuestionId"] = "q_1", ["Answers"] = new List<string> { "Postgres" } },
+               new List<string> { "RunId", "QuestionId" }, "An answer to an ask_user question.");
+
+            s["SessionCompactRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["Endpoint"] = PstrNullable("The endpoint that writes the summary; null uses the session's endpoint, then the default.")
+            }, new Dictionary<string, object?> { ["Endpoint"] = "ollama-local" });
+
+            s["SessionCompactResult"] = Obj(new Dictionary<string, M>
+            {
+                ["Compacted"] = Pbool("Whether the conversation changed."),
+                ["Message"] = Pstr("The outcome."),
+                ["Endpoint"] = Pstr("The endpoint that wrote the summary."),
+                ["MessagesBefore"] = Pint("Messages before."),
+                ["MessagesAfter"] = Pint("Messages after."),
+                ["EstimatedTokensBefore"] = Pint("Estimated tokens before."),
+                ["EstimatedTokensAfter"] = Pint("Estimated tokens after."),
+                ["ContextWindow"] = Pint("The endpoint's context window in tokens.")
+            }, new Dictionary<string, object?> { ["Compacted"] = true, ["Message"] = "Compacted 12 messages.", ["Endpoint"] = "ollama-local", ["MessagesBefore"] = 30, ["MessagesAfter"] = 9, ["EstimatedTokensBefore"] = 21000, ["EstimatedTokensAfter"] = 4200, ["ContextWindow"] = 32768 });
+
+            s["BackgroundProcessInfo"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("Process id (mux's, not the OS pid)."),
+                ["Name"] = Pstr("Display name."),
+                ["Command"] = Pstr("Command line."),
+                ["WorkingDirectory"] = Pstr("Directory it runs in."),
+                ["ProcessId"] = Pint("OS process id."),
+                ["StartedUtc"] = Pstr("Start time (UTC).", "date-time"),
+                ["ExitedUtc"] = PstrNullable("Exit time (UTC), or null while running."),
+                ["Running"] = Pbool("Whether it is running."),
+                ["ExitCode"] = PintNullable("Exit code once exited."),
+                ["StoppedByUser"] = Pbool("Whether a user stopped it."),
+                ["OutputChars"] = Pint("Characters of output captured.", "int64"),
+                ["UnreadChars"] = Pint("Characters not yet read by the model.", "int64")
+            }, new Dictionary<string, object?> { ["Id"] = "p1", ["Command"] = "npm run dev", ["Running"] = true, ["ProcessId"] = 4242 });
+
+            s["ProcessOutputDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("Process id."),
+                ["Command"] = Pstr("Command line."),
+                ["Text"] = Pstr("The most recent output."),
+                ["Running"] = Pbool("Whether it is running."),
+                ["ExitCode"] = PintNullable("Exit code once exited.")
+            }, new Dictionary<string, object?> { ["Id"] = "p1", ["Command"] = "npm run dev", ["Text"] = "ready on http://localhost:5173", ["Running"] = true });
+
+            s["BackgroundProcessOutput"] = Obj(new Dictionary<string, M>
+            {
+                ["Id"] = Pstr("Process id."),
+                ["Text"] = Pstr("Output read."),
+                ["DroppedChars"] = Pint("Characters dropped because the buffer overflowed.", "int64"),
+                ["Running"] = Pbool("Whether it is running."),
+                ["ExitCode"] = PintNullable("Exit code once exited.")
+            }, new Dictionary<string, object?> { ["Id"] = "p1", ["Running"] = false, ["ExitCode"] = 0 });
+
+            s["ProjectTrustDto"] = Obj(new Dictionary<string, M>
+            {
+                ["WorkingDirectory"] = Pstr("The directory asked about."),
+                ["ProjectRoot"] = Pstr("The project root the decision applies to."),
+                ["Level"] = Pstr("`all`, `playbooks`, `ignore`, or `unknown`.")
+            }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["ProjectRoot"] = "/src/app", ["Level"] = "playbooks" });
+
+            s["ProjectTrustRequest"] = Obj(new Dictionary<string, M>
+            {
+                ["WorkingDirectory"] = Pstr("A directory inside the project."),
+                ["Level"] = Pstr("`all`, `playbooks`, `ignore`, or `reset`.")
+            }, new Dictionary<string, object?> { ["WorkingDirectory"] = "/src/app", ["Level"] = "all" }, new List<string> { "WorkingDirectory", "Level" });
+
+            s["SearchProviderDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Name"] = Pstr("Unique provider name."),
+                ["ProviderType"] = Pstr("`tavily` or `you`."),
+                ["Endpoint"] = Pstr("Optional API base URL override."),
+                ["ApiKeySet"] = Pbool("Whether a key is stored (read only)."),
+                ["ApiKey"] = PstrNullable("A new key (write only); blank keeps the stored key."),
+                ["Enabled"] = Pbool("Whether the provider is enabled."),
+                ["IsDefault"] = Pbool("Whether it is the default provider."),
+                ["TimeoutMs"] = Pint("Request timeout in milliseconds.")
+            }, new Dictionary<string, object?> { ["Name"] = "tavily", ["ProviderType"] = "tavily", ["ApiKeySet"] = true, ["Enabled"] = true, ["IsDefault"] = true, ["TimeoutMs"] = 15000 });
+
+            s["SearchSettingsDto"] = Obj(new Dictionary<string, M>
+            {
+                ["Enabled"] = Pbool("Whether web search is enabled."),
+                ["AllowFallback"] = Pbool("Whether a failing provider falls back to the next."),
+                ["Providers"] = Parr(Ref("SearchProviderDto"), "The providers, in order."),
+                ["ProviderTypes"] = Parr(Pstr("A provider type."), "Supported provider types (read only).")
+            }, new Dictionary<string, object?> { ["Enabled"] = true, ["AllowFallback"] = true });
+
+            s["KeybindingCommandDto"] = Obj(new Dictionary<string, M>
+            {
+                ["CommandId"] = Pstr("Command id."),
+                ["Title"] = Pstr("Display title."),
+                ["Category"] = Pstr("Group."),
+                ["DefaultChord"] = PstrNullable("Shipped default chord."),
+                ["EffectiveChord"] = PstrNullable("Chord in effect."),
+                ["Overridden"] = Pbool("Whether an override is recorded.")
+            }, new Dictionary<string, object?> { ["CommandId"] = "mux.save", ["Title"] = "Save session", ["Category"] = "Session", ["DefaultChord"] = "ctrl+s", ["EffectiveChord"] = "ctrl+s", ["Overridden"] = false });
 
             s["RunStateReply"] = Obj(new Dictionary<string, M>
             {
@@ -1991,7 +2324,9 @@ namespace Mux.Server.Documentation
                 ["LastError"] = PstrNullable("The most recent error message, or null."),
                 ["TotalTaskCount"] = Pint("Total tasks in the current task-plan snapshot."),
                 ["CompletedTaskCount"] = Pint("Completed tasks in the current task-plan snapshot."),
-                ["Tasks"] = Parr(Ref("RunTaskDto"), "The current task-plan checklist (empty when the run has no plan).")
+                ["Tasks"] = Parr(Ref("RunTaskDto"), "The current task-plan checklist (empty when the run has no plan)."),
+                ["PendingApprovalCount"] = Pint("Tool approvals waiting for a decision."),
+                ["PendingQuestionCount"] = Pint("ask_user questions waiting for an answer.")
             }, new Dictionary<string, object?>
             {
                 ["RunId"] = "8b2f…", ["SessionId"] = "9f1c…", ["EndpointName"] = "openai-gpt4o", ["Model"] = "gpt-4o",

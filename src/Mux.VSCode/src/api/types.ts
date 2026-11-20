@@ -217,6 +217,53 @@ export interface RestSettings {
     ApiKey?: string;
 }
 
+/** The Mux Cloud block of the editable settings (the machine secret is never returned). */
+export interface CloudSettings {
+    Enabled: boolean;
+    ServerUrl: string;
+    MachineName?: string | null;
+    MachineId?: string | null;
+    AccountEmail?: string | null;
+    MachineSecretSet: boolean;
+    AllowRemoteToolApproval: boolean;
+    HeartbeatSeconds: number;
+    ReconnectMaxDelaySeconds: number;
+    AllowInvalidCertificates: boolean;
+}
+
+/** `GET /v1.0/api/cloud/status`: the Mux Cloud tunnel status on this machine. */
+export interface CloudStatus {
+    /** The state name, the same as {@link StateName}. */
+    State: string;
+    StateName: 'Disabled' | 'Connecting' | 'Connected' | 'Reconnecting' | 'SignedOut' | 'Revoked' | string;
+    /**
+     * What users see as the state: `not_signed_in`, `off`, `connecting`, `connected`, `reconnecting`, `signed_out`,
+     * or `removed`. Absent on hubs older than this field; fall back to {@link StateName}.
+     */
+    StateKey?: string;
+    /** English label for {@link StateKey}, for example `Not signed in`. */
+    StateLabel?: string;
+    /** Why the connection is in this state (English, with detail), or empty. */
+    Reason: string;
+    /**
+     * Stable code for {@link Reason} (`not_signed_in`, `turned_off`, `agent_not_running`, `another_process`,
+     * `not_hosted_here`, `clock_skew`, `credential_rejected`, `removed`, `upgrade_required`, `unreachable`,
+     * `connection_dropped`, `heartbeat_timeout`, `replaced`, `server_restarting`, `rate_limited`,
+     * `handshake_rejected`), or empty. Show the translated sentence for a known code, else {@link Reason}.
+     */
+    ReasonCode?: string;
+    ServerUrl: string;
+    MachineId: string;
+    MachineName: string;
+    AccountEmail: string;
+    AllowRemoteToolApproval: boolean;
+    HostedHere: boolean;
+    ConnectionId: string;
+    ConnectedUtc?: string | null;
+    LatencyMs?: number | null;
+    RetryInSeconds?: number | null;
+}
+
 /** The editable settings object as returned by `GET /v1.0/api/settings`. */
 export interface MuxServerSettings {
     DefaultApprovalPolicy: string;
@@ -238,6 +285,7 @@ export interface MuxServerSettings {
     ShowBoundaryLines: boolean;
     DefaultEnqueueBehavior: string;
     Rest: RestSettings;
+    Cloud?: CloudSettings;
     [key: string]: unknown;
 }
 

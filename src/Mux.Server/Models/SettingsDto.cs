@@ -28,6 +28,43 @@ namespace Mux.Server.Models
     }
 
     /// <summary>
+    /// The Mux Cloud portion of the editable settings. The machine secret is never returned; signing in and out goes
+    /// through <c>POST /v1.0/api/cloud/login</c> and <c>/logout</c>.
+    /// </summary>
+    public class CloudSettingsDto
+    {
+        /// <summary>Whether this machine connects to Mux Cloud (only effective once signed in).</summary>
+        public bool Enabled { get; set; }
+
+        /// <summary>Mux Cloud server URL.</summary>
+        public string ServerUrl { get; set; } = MuxCloud.Protocol.TunnelProtocol.DefaultServerUrl;
+
+        /// <summary>Machine display name, or null for the host name.</summary>
+        public string? MachineName { get; set; }
+
+        /// <summary>Read only: enrolled machine id, or null.</summary>
+        public string? MachineId { get; set; }
+
+        /// <summary>Read only: account email, or null.</summary>
+        public string? AccountEmail { get; set; }
+
+        /// <summary>Read only: whether a machine secret is stored (the value is never returned).</summary>
+        public bool MachineSecretSet { get; set; }
+
+        /// <summary>Whether remote users may approve tools on this machine. Default true.</summary>
+        public bool AllowRemoteToolApproval { get; set; } = true;
+
+        /// <summary>Heartbeat interval in seconds (5-300).</summary>
+        public int HeartbeatSeconds { get; set; } = 20;
+
+        /// <summary>Largest reconnect delay in seconds (5-3600).</summary>
+        public int ReconnectMaxDelaySeconds { get; set; } = 60;
+
+        /// <summary>Accept invalid TLS certificates from a self-hosted server.</summary>
+        public bool AllowInvalidCertificates { get; set; }
+    }
+
+    /// <summary>
     /// The editable subset of <see cref="MuxSettings"/> surfaced to the dashboard settings form. Secrets are
     /// masked; the raw settings model is never returned wholesale.
     /// </summary>
@@ -105,6 +142,30 @@ namespace Mux.Server.Models
         /// <summary>REST server settings (API key masked).</summary>
         public RestSettingsDto Rest { get; set; } = new RestSettingsDto();
 
+        /// <summary>Path to a custom system prompt file, or null for the built-in prompt.</summary>
+        public string? SystemPromptPath { get; set; }
+
+        /// <summary>A per-run token budget, or null for none.</summary>
+        public int? MaxTokenBudget { get; set; }
+
+        /// <summary>Percent of the context window kept free as a safety margin (5 to 50).</summary>
+        public int ContextWindowSafetyMarginPercent { get; set; } = 15;
+
+        /// <summary>Characters per token used to estimate context size (2.0 to 6.0).</summary>
+        public double TokenEstimationRatio { get; set; } = 3.5;
+
+        /// <summary>How often, in seconds, skills are rescanned from disk.</summary>
+        public int SkillRefreshIntervalSeconds { get; set; } = 30;
+
+        /// <summary>A custom skills directory, or null for the default.</summary>
+        public string? SkillsDirectory { get; set; }
+
+        /// <summary>Whether OpenTelemetry export is enabled.</summary>
+        public bool TelemetryEnabled { get; set; }
+
+        /// <summary>Mux Cloud connection settings (secret masked).</summary>
+        public CloudSettingsDto? Cloud { get; set; }
+
         /// <summary>
         /// Project a <see cref="MuxSettings"/> into a masked DTO.
         /// </summary>
@@ -137,6 +198,13 @@ namespace Mux.Server.Models
                 SummaryChunkLines = settings.Context.SummaryChunkLines,
                 SummaryCacheEnabled = settings.Context.SummaryCacheEnabled,
                 SummaryCacheRetentionDays = settings.Context.SummaryCacheRetentionDays,
+                SystemPromptPath = settings.SystemPromptPath,
+                MaxTokenBudget = settings.MaxTokenBudget,
+                ContextWindowSafetyMarginPercent = settings.ContextWindowSafetyMarginPercent,
+                TokenEstimationRatio = settings.TokenEstimationRatio,
+                SkillRefreshIntervalSeconds = settings.SkillRefreshIntervalSeconds,
+                SkillsDirectory = settings.SkillsDirectory,
+                TelemetryEnabled = settings.Telemetry.Enabled,
                 Rest = new RestSettingsDto
                 {
                     Hostname = settings.Rest.Hostname,
@@ -145,6 +213,19 @@ namespace Mux.Server.Models
                     CorsAllowOrigin = settings.Rest.CorsAllowOrigin,
                     ApiKeySet = !string.IsNullOrEmpty(settings.Rest.ApiKey),
                     ApiKey = null
+                },
+                Cloud = new CloudSettingsDto
+                {
+                    Enabled = settings.Cloud.Enabled,
+                    ServerUrl = settings.Cloud.ServerUrl,
+                    MachineName = settings.Cloud.MachineName,
+                    MachineId = settings.Cloud.MachineId,
+                    AccountEmail = settings.Cloud.AccountEmail,
+                    MachineSecretSet = !string.IsNullOrEmpty(settings.Cloud.MachineSecret),
+                    AllowRemoteToolApproval = settings.Cloud.AllowRemoteToolApproval,
+                    HeartbeatSeconds = settings.Cloud.HeartbeatSeconds,
+                    ReconnectMaxDelaySeconds = settings.Cloud.ReconnectMaxDelaySeconds,
+                    AllowInvalidCertificates = settings.Cloud.AllowInvalidCertificates
                 }
             };
         }
@@ -179,6 +260,13 @@ namespace Mux.Server.Models
             settings.Context.SummaryChunkLines = SummaryChunkLines;
             settings.Context.SummaryCacheEnabled = SummaryCacheEnabled;
             settings.Context.SummaryCacheRetentionDays = SummaryCacheRetentionDays;
+            settings.SystemPromptPath = string.IsNullOrWhiteSpace(SystemPromptPath) ? null : SystemPromptPath!.Trim();
+            settings.MaxTokenBudget = MaxTokenBudget.HasValue && MaxTokenBudget.Value > 0 ? MaxTokenBudget : null;
+            settings.ContextWindowSafetyMarginPercent = ContextWindowSafetyMarginPercent;
+            settings.TokenEstimationRatio = TokenEstimationRatio;
+            settings.SkillRefreshIntervalSeconds = SkillRefreshIntervalSeconds;
+            settings.SkillsDirectory = string.IsNullOrWhiteSpace(SkillsDirectory) ? null : SkillsDirectory!.Trim();
+            settings.Telemetry.Enabled = TelemetryEnabled;
 
             if (Rest != null)
             {
@@ -190,6 +278,19 @@ namespace Mux.Server.Models
                 {
                     settings.Rest.ApiKey = Rest.ApiKey;
                 }
+            }
+
+            // Every cloud field except the credential is editable from any surface (including remotely, by the
+            // parity rule). The machine id, secret, and account email change only by signing in or out.
+            if (Cloud != null)
+            {
+                settings.Cloud.Enabled = Cloud.Enabled;
+                settings.Cloud.ServerUrl = Cloud.ServerUrl;
+                settings.Cloud.MachineName = Cloud.MachineName;
+                settings.Cloud.AllowRemoteToolApproval = Cloud.AllowRemoteToolApproval;
+                settings.Cloud.HeartbeatSeconds = Cloud.HeartbeatSeconds;
+                settings.Cloud.ReconnectMaxDelaySeconds = Cloud.ReconnectMaxDelaySeconds;
+                settings.Cloud.AllowInvalidCertificates = Cloud.AllowInvalidCertificates;
             }
         }
     }

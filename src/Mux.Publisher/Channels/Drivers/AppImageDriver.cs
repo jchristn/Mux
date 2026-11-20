@@ -43,8 +43,11 @@ namespace Mux.Publisher.Channels.Drivers
                 string appDirAbs = System.IO.Path.Combine(context.StagingRoot, appDir);
 
                 plan.AddFile(appDir + "/AppRun", RenderAppRun(binaryName));
-                plan.AddFile(appDir + "/" + project + ".desktop",
-                    DebRpmDriver.RenderDesktopEntry(display, context.Manifest.Project.Description, binaryName, project));
+                // The AppDir's top-level .desktop entry and icon (named after the identifier), plus .DirIcon, which
+                // file managers show on the .AppImage file itself.
+                string identifier = Identifier(context);
+                plan.AddFile(appDir + "/" + identifier + ".desktop",
+                    DebRpmDriver.RenderDesktopEntry(display, DebRpmDriver.DesktopComment(context.Manifest.Project), binaryName, identifier));
 
                 plan.AddCommand(new ShellCommand("mkdir", new List<string> { "-p", appDirAbs + "/usr/bin" }) { Description = "Create AppDir (" + rid + ")" });
                 plan.AddCommand(new ShellCommand("cp", new List<string> { "-R", published.PublishDir + "/.", appDirAbs + "/usr/bin" }) { Description = "Copy published binaries" });
@@ -57,15 +60,19 @@ namespace Mux.Publisher.Channels.Drivers
                     plan.AddCommand(new ShellCommand("chmod", new List<string> { "+x", appDirAbs + "/usr/bin/" + extra.FileName }) { Description = "Mark the bundled " + (string.IsNullOrEmpty(extra.Role) ? "binary" : extra.Role) + " executable" });
                 }
 
-                plan.AddCommand(new ShellCommand("cp", new List<string> { System.IO.Path.Combine(context.RepoRoot, "assets", "icon-green.png"), appDirAbs + "/" + project + ".png" }) { Description = "Copy the app icon", ContinueOnError = true });
+                string iconSource = System.IO.Path.Combine(context.RepoRoot, "assets", "installer", "hicolor", "256x256", "apps", identifier + ".png");
+                plan.AddCommand(new ShellCommand("cp", new List<string> { iconSource, appDirAbs + "/" + identifier + ".png" }) { Description = "Copy the app icon" });
+                plan.AddCommand(new ShellCommand("cp", new List<string> { iconSource, appDirAbs + "/.DirIcon" }) { Description = "Copy the file-manager icon (.DirIcon)" });
 
                 // appimagetool reads the target architecture from the ARCH environment variable. One channel
                 // run packs every runtime, so set it per invocation through env(1) rather than relying on the
                 // caller's environment; without it appimagetool guesses from the AppDir's ELF files and fails
                 // when a cross-architecture publish carries a binary of another architecture.
+                // APPIMAGE_EXTRACT_AND_RUN=1 lets appimagetool (itself an AppImage) run without FUSE, which CI
+                // runners lack.
                 string arch = AppImageArch(rid);
                 string outFile = System.IO.Path.Combine(context.OutputRoot, "linux", Naming.AppImage(display, context.Version, rid));
-                plan.AddCommand(new ShellCommand("env", new List<string> { "ARCH=" + arch, "appimagetool", appDirAbs, outFile })
+                plan.AddCommand(new ShellCommand("env", new List<string> { "ARCH=" + arch, "APPIMAGE_EXTRACT_AND_RUN=1", "appimagetool", appDirAbs, outFile })
                 {
                     Description = "Pack the AppImage for " + rid + " (ARCH=" + arch + ")"
                 });

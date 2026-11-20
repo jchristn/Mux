@@ -19,6 +19,7 @@
     <EmbedUntrackedSources>true</EmbedUntrackedSources>
   </PropertyGroup>
 
+
   <PropertyGroup>
     <!-- No blanket warning suppression. Nullable (CS86xx), obsolete-usage (CS0618), XML-documentation
          (CS1591/CS1572/CS1587), and other warnings must be fixed at the call site, not silenced here. -->

@@ -40,5 +40,3 @@ await foreach (AgentEvent evt in loop.RunAsync("List the files in this directory
 ## License
 
 MIT. See the [repository](https://github.com/jchristn/Mux) for full documentation.
-
-> **Beta:** APIs, tool schemas, and configuration formats may change between releases.

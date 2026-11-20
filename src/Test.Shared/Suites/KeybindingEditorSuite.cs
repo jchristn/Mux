@@ -3,6 +3,7 @@ namespace Test.Shared.Suites
     using System.Collections.Generic;
     using System.Threading;
     using System.Threading.Tasks;
+    using Mux.Core.Keybindings;
     using Mux.Desktop.Services;
     using Touchstone.Core;
 

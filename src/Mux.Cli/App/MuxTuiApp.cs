@@ -372,6 +372,7 @@ namespace Mux.Cli.App
             _Catalog.Add(new CommandDescriptor("mux.plan", "Plan mode", null, () => HandlePlanArgument(string.Empty), "Session", new[] { "plan" }, HandlePlanArgument));
             _Catalog.Add(new CommandDescriptor("mux.loop", "Repeat a prompt", null, () => HandleLoopArgument(string.Empty), "Session", new[] { "loop" }, HandleLoopArgument));
             _Catalog.Add(new CommandDescriptor("mux.memory", "Memory", null, () => HandleMemoryArgument(string.Empty), "Session", new[] { "memory", "memories" }, HandleMemoryArgument));
+            _Catalog.Add(new CommandDescriptor("mux.cloud", "Mux Cloud", null, () => HandleCloudArgument(string.Empty), "Session", new[] { "cloud" }, HandleCloudArgument));
             _Catalog.Add(new CommandDescriptor("mux.worktrees", "Worktrees", null, () => HandleWorktreesArgument(string.Empty), "Session", new[] { "worktrees", "worktree" }, HandleWorktreesArgument));
             _Catalog.Add(new CommandDescriptor("mux.processes", "Background processes", null, () => HandleProcessesArgument(string.Empty), "Session", new[] { "processes", "ps", "procs" }, HandleProcessesArgument));
             _Catalog.Add(new CommandDescriptor("mux.loops", "Loops", null, () => HandleLoopsArgument(string.Empty), "Session", new[] { "loops" }, HandleLoopsArgument));
@@ -904,6 +905,8 @@ namespace Mux.Cli.App
             try
             {
                 SettingsLoader.SaveSettings(updated);
+                bool cloudEnabled = updated.Cloud.Enabled;
+                updated.Cloud.Enabled = SettingsLoader.UpdateCloud(c => c.Enabled = cloudEnabled).Enabled;
             }
             catch (Exception ex)
             {
@@ -5816,6 +5819,99 @@ namespace Mux.Cli.App
                 }
 
                 WriteNotice(line);
+            }
+        }
+
+        // "/cloud [status | login | logout | remote-approval on|off]": connect this machine to Mux Cloud so the cloud
+        // dashboard and mobile app can use it from anywhere. The tray agent runs the tunnel; this shows and changes it.
+        private void HandleCloudArgument(string argument)
+        {
+            string[] parts = (argument ?? string.Empty).Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            string verb = parts.Length > 0 ? parts[0].ToLowerInvariant() : "status";
+            switch (verb)
+            {
+                case "status":
+                    _ = ShowCloudStatusAsync();
+                    return;
+                case "login":
+                    MuxSettings current = SettingsLoader.LoadSettings();
+                    CloudLoginModal modal = new CloudLoginModal(current.Cloud.ServerUrl, current.Cloud.MachineName ?? Mux.Core.Cloud.CloudMachineInfo.Hostname(), current.Cloud.AccountEmail ?? (parts.Length > 1 ? parts[1] : string.Empty));
+                    _App.Modals.Push(modal);
+                    _ = ResolveCloudLoginAsync(modal);
+                    return;
+                case "logout":
+                    _ = CloudLogoutAsync();
+                    return;
+                case "remote-approval":
+                    string value = parts.Length > 1 ? parts[1].ToLowerInvariant() : string.Empty;
+                    if (value != "on" && value != "off")
+                    {
+                        WriteNotice("Usage: /cloud remote-approval on|off");
+                        return;
+                    }
+
+                    MuxSettings settings = SettingsLoader.LoadSettings();
+                    settings.Cloud.AllowRemoteToolApproval = value == "on";
+                    SettingsLoader.SaveSettings(settings);
+                    WriteNotice(value == "on"
+                        ? "✓ Remote tool approval is on: users signed in to Mux Cloud can approve tools on this machine."
+                        : "✓ Remote tool approval is off: runs started through Mux Cloud deny tools that would edit files or run commands.");
+                    return;
+                default:
+                    WriteNotice("Usage: /cloud [status | login | logout | remote-approval on|off]");
+                    return;
+            }
+        }
+
+        private async Task ShowCloudStatusAsync()
+        {
+            Mux.Core.Cloud.CloudStatus status = await Mux.Core.Cloud.CloudHubStatusClient.GetOrOfflineAsync(_Cts.Token).ConfigureAwait(false);
+            using System.IO.StringWriter text = new System.IO.StringWriter();
+            Mux.Cli.Commands.CloudCommand.WriteStatus(status, text, "/cloud login", "/cloud remote-approval off");
+            foreach (string line in text.ToString().Split('\n', StringSplitOptions.RemoveEmptyEntries))
+            {
+                WriteNotice(line.TrimEnd('\r'));
+            }
+
+        }
+
+        private async Task CloudLogoutAsync()
+        {
+            WriteNotice("Signing this machine out of Mux Cloud…");
+            try
+            {
+                bool confirmed = await Mux.Core.Cloud.CloudAccountService.LogoutAsync(_Cts.Token).ConfigureAwait(false);
+                WriteNotice((confirmed ? "✓ " : "⚠ ") + Mux.Core.Cloud.CloudAccountService.LogoutMessage(confirmed));
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private async Task ResolveCloudLoginAsync(CloudLoginModal modal)
+        {
+            object? result = await modal.Completion.ConfigureAwait(false);
+            if (result is not CloudLoginInput input)
+            {
+                return;
+            }
+
+            WriteNotice("Signing in to Mux Cloud…");
+            try
+            {
+                CloudSettings saved = await Mux.Core.Cloud.CloudAccountService.LoginAsync(input.Email, input.Password, string.IsNullOrWhiteSpace(input.ServerUrl) ? null : input.ServerUrl, string.IsNullOrWhiteSpace(input.MachineName) ? null : input.MachineName, _Cts.Token).ConfigureAwait(false);
+                WriteNotice("✓ Signed in as " + saved.AccountEmail + ". This machine is \"" + saved.MachineName + "\".");
+                Mux.Core.Startup.AgentLauncher.EnsureRunning();
+                await Task.Delay(1500, _Cts.Token).ConfigureAwait(false);
+                await ShowCloudStatusAsync().ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is Mux.Core.Cloud.CloudEnrollmentException || ex is ArgumentException)
+            {
+                string server = string.IsNullOrWhiteSpace(input.ServerUrl) ? SettingsLoader.LoadSettings().Cloud.ServerUrl : input.ServerUrl;
+                WriteNotice("⚠ " + Mux.Core.Cloud.CloudSignup.ErrorMessage(ex, server));
+            }
+            catch (OperationCanceledException)
+            {
             }
         }
 
