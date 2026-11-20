@@ -2,6 +2,16 @@
 
 All notable changes to the mux VS Code extension are documented here.
 
+## 2.0.0
+
+- Versioned `2.0.0` in step with Mux 2.0.0; no extension changes since 1.8.4.
+
+## 1.8.4
+
+- **New publisher.** The extension is now published by Lattice AI as `LatticeAI.mux-ai`. The old
+  `usemux.mux-ai` listing is gone and gets no more updates. If you have it installed, uninstall it and install
+  **mux-ai** from Lattice AI. Settings carry over, since they are keyed by `mux.*` and not by the publisher.
+
 ## 1.8.3
 
 - **Color palettes.** The new `mux.colorPalette` setting defaults to `editor`, which follows your VS Code theme.

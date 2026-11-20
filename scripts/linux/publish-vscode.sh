@@ -53,4 +53,4 @@ if ! npx --yes @vscode/vsce publish -p "$TOKEN"; then
 fi
 echo
 echo "Done. Published to the VS Code Marketplace:"
-echo "  https://marketplace.visualstudio.com/items?itemName=usemux.mux-ai"
+echo "  https://marketplace.visualstudio.com/items?itemName=LatticeAI.mux-ai"

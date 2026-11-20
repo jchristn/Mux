@@ -14,12 +14,17 @@ first; add Open VSX whenever you want broader reach.
 ## Before you start
 
 - **Node.js 20+** installed, and a terminal open at `C:\Code\Mux\src\Mux.VSCode`.
-- The extension's Marketplace identity is **`usemux.mux-ai`** — publisher `usemux` (`"publisher"` in
+- The extension's Marketplace identity is **`LatticeAI.mux-ai`** — publisher `LatticeAI` (`"publisher"` in
   `package.json`) plus the internal name `mux-ai` (`"name"`), with display name `mux-ai` (`"displayName"`).
   The Marketplace requires **both** the `name` and the `displayName` to be unique across the whole
   Marketplace — plain `mux` is taken for each — which is why both are `mux-ai`. The identity also appears in
-  one integration test (`usemux.mux-ai`). If you change any of them, change `package.json` and that test
+  one integration test (`LatticeAI.mux-ai`). If you change any of them, change `package.json` and that test
   together.
+- Through 1.8.3 the extension was published as `usemux.mux-ai`. That listing was removed so `LatticeAI` could
+  reuse the name `mux-ai` and the display name `mux-ai`, which the Marketplace allows only once across all
+  publishers. Removing the extension (`vsce unpublish`) did not release the name; deleting the `usemux`
+  publisher did. 1.8.4 is the first `LatticeAI.mux-ai` release. Anyone with the old ID installed has to install
+  the new one themselves.
 - Decide nothing else — versions, categories, and the manifest are already set.
 
 ## Part 1 — VS Code Marketplace token
@@ -59,7 +64,7 @@ getting these two settings wrong. Set them exactly.
    used for the token. Using a different account here is the second most common cause of a `401` at publish
    time — the token and the publisher must belong to the same account.
 2. Click **Create publisher**.
-3. **ID:** `usemux` (must match `package.json`). **Name:** any display name.
+3. **ID:** `LatticeAI` (must match `package.json`). **Name:** any display name.
 4. Save.
 
 ## Part 3 — Publish to the VS Code Marketplace
@@ -70,10 +75,10 @@ The fastest first publish is manual from your machine. It needs only the token f
 cd C:\Code\Mux\src\Mux.VSCode
 npm ci
 npm install -g @vscode/vsce
-vsce login usemux
+vsce login LatticeAI
 ```
 
-`vsce login usemux` prompts for the token — paste the `VSCE_PAT` and press Enter. Then:
+`vsce login LatticeAI` prompts for the token — paste the `VSCE_PAT` and press Enter. Then:
 
 ```
 vsce publish
@@ -83,7 +88,7 @@ This compiles (via the `vscode:prepublish` script), packages the `.vsix`, and up
 missing icon or activation events are fine; they are not errors. When it succeeds the extension is live at:
 
 ```
-https://marketplace.visualstudio.com/items?itemName=usemux.mux-ai
+https://marketplace.visualstudio.com/items?itemName=LatticeAI.mux-ai
 ```
 
 It becomes searchable as "mux" in the VS Code Extensions panel within a few minutes.
@@ -93,8 +98,8 @@ It becomes searchable as "mux" in the VS Code Extensions panel within a few minu
 - **`Failed request: (401)` on publish, even though `vsce login` worked.** The token lacks the right scope or
   organization, or the publisher belongs to a different account. `vsce login` only checks that the token is a
   valid Azure DevOps token; publishing additionally needs **Marketplace → Manage** and **Organization = All
-  accessible organizations**. Recreate the token with both (Part 1.2), run `vsce login usemux` again, and
-  republish. If it still fails, confirm at `marketplace.visualstudio.com/manage` that the publisher `usemux`
+  accessible organizations**. Recreate the token with both (Part 1.2), run `vsce login LatticeAI` again, and
+  republish. If it still fails, confirm at `marketplace.visualstudio.com/manage` that the publisher `LatticeAI`
   is owned by the same Microsoft account that issued the token.
 - **"The license is not attached" or a license warning.** The MIT license ships as `LICENSE.md` inside the
   `.vsix` (you can see it in the file list `vsce` prints before uploading). No action is needed. If you want
@@ -124,7 +129,7 @@ Marketplace.
 4. Publish from `src/Mux.VSCode`:
    ```
    npm install -g ovsx
-   ovsx create-namespace usemux -p <OVSX_PAT>
+   ovsx create-namespace LatticeAI -p <OVSX_PAT>
    ovsx publish -p <OVSX_PAT>
    ```
    The namespace only needs to be created once; later publishes are just `ovsx publish -p <OVSX_PAT>`.

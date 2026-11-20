@@ -1,4 +1,21 @@
-# Release plan: installers on GitHub Releases
+# Release plan: installers on GitHub Releases (archived)
+
+> **Done.** Mux 2.0.0 shipped on 2026-11-19 from a pipeline rebuilt to `~/Code/Agents/requirements/INSTALLERS.md`.
+> What changed from the plan below:
+>
+> - **Pipeline:** tag-triggered fan-out/fan-in `release.yml` (per-OS package jobs, per-OS verify jobs that install
+>   each package and run `mux --version`, one release job with a single `SHA256SUMS` and generated notes);
+>   `workflow_dispatch` is a dry run; package managers sit behind `ENABLE_PACKAGE_MANAGERS` (off).
+> - **macOS:** a new `.pkg` (recommended) with the PATH link and the tray agent's LaunchAgent; the `.dmg` gained an
+>   Applications shortcut and the unsigned-build note; the `.app` is ad-hoc signed and verified.
+> - **Identity:** `ai.latticetech.mux`, publisher Lattice AI, LLC, tagline "Your AI agent. Your models. Your infra.
+>   Anywhere."; 1.x login registrations migrate to the new names.
+> - **Tray agent (gap 3):** already bundled; now also started by the installers on every OS.
+> - **Smoke test (gap 7):** the verify jobs.
+> - **1.8.0** was released separately from `main` on 2026-11-19, so 2.0.0's changelog covers only 2.0.0.
+>
+> Current docs: [INSTALL.md](../INSTALL.md) for users, [BUILDING_INSTALLERS.md](../BUILDING_INSTALLERS.md) for
+> maintainers.
 
 Plan for building unsigned installers for macOS, Windows, and Linux and publishing them to
 [GitHub Releases](https://github.com/jchristn/Mux/releases), written 2026-11-19 for the 2.0.0 release (Mux Cloud).
