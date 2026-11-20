@@ -22,7 +22,7 @@ namespace Mux.Publisher.Channels.Drivers
         /// <summary>Debian/Ubuntu dependencies of a self-contained .NET desktop app with an Avalonia tray agent.</summary>
         public static readonly string[] DebDepends =
         {
-            "libicu76 | libicu75 | libicu74 | libicu73 | libicu72 | libicu71 | libicu70 | libicu69 | libicu68 | libicu67 | libicu66",
+            "libicu80 | libicu79 | libicu78 | libicu77 | libicu76 | libicu75 | libicu74 | libicu73 | libicu72 | libicu71 | libicu70 | libicu69 | libicu68 | libicu67 | libicu66",
             "libssl3t64 | libssl3 | libssl1.1",
             "zlib1g",
             "libstdc++6",
