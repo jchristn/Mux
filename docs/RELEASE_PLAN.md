@@ -23,8 +23,8 @@ checksums.
 ## 2. Gaps before publishing 2.0.0
 
 1. **Version.** Done 2026-11-19 (approved): every Mux project and `Defaults.ProductVersion` are 2.0.0, matching
-   MuxCloud and `MuxCloud.Protocol`. Versions 1.6.0 to 1.8.0 were never released; their CHANGELOG sections are marked
-   "shipped in 2.0.0". The VS Code extension (1.8.3) and the SDKs (1.5.0) keep their own versions.
+   MuxCloud and `MuxCloud.Protocol`. 1.8.0 (with the 1.6.0 and 1.7.0 changes) was released from `main` on
+   2026-11-19. The VS Code extension (1.8.3) and the SDKs (1.5.0) keep their own versions.
 2. **Merge.** `feature/v2.0.0` is 17 or more commits ahead of `main`. Merge after validation; the release workflow
    checks out the branch it runs on, so run it from `main` (or pass `--ref`).
 3. **Tray agent in the installers.** Already done: the `desktop` artifact in `publisher.json` bundles `Mux.Agent`

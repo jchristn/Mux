@@ -18,7 +18,7 @@
 
 Version 2.0.0 adds [Mux Cloud](https://app.usemux.ai): sign a machine in with `mux cloud login` (or from the
 desktop app, dashboard, VS Code, or the tray menu) and use it from any browser or the Mux mobile app as if you
-were at it. 2.0.0 also ships the 1.6.0 to 1.8.0 changes below, which were not released on their own.
+were at it.
 
 Version 1.8.0 moved the `openai` adapter to OpenAI's Responses API on PolyPrompt 4.0, so every current
 OpenAI model works, including the codex-tuned coding models, and reasoning models keep their reasoning
