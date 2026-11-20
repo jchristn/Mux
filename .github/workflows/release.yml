@@ -269,7 +269,8 @@ jobs:
         with:
           pattern: installers-*
           merge-multiple: true
-          path: assets
+          # Not "assets": that is the repository's own artwork folder in this checkout.
+          path: release-assets
 
       - name: Checksums and notes
         shell: bash
@@ -277,8 +278,8 @@ jobs:
           set -euo pipefail
           [ "$GITHUB_REF_NAME" = "v$V" ] || { echo "::error::Tag $GITHUB_REF_NAME does not match v$V"; exit 1; }
           bash .github/scripts/release-notes.sh "$V" > "$RUNNER_TEMP/notes.md"
-          (cd assets && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
-          ls -la assets
+          (cd release-assets && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+          ls -la release-assets
 
       - name: Create the GitHub Release
         uses: softprops/action-gh-release@v3
@@ -286,7 +287,7 @@ jobs:
           tag_name: v${{ env.V }}
           name: Mux ${{ env.V }}
           body_path: ${{ runner.temp }}/notes.md
-          files: assets/*
+          files: release-assets/*
           fail_on_unmatched_files: true
           draft: false
           prerelease: ${{ contains(env.V, '-') }}
