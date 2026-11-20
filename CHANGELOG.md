@@ -2,7 +2,9 @@
 
 All notable changes to mux are documented here.
 
-## 1.8.0 (unreleased)
+## 1.8.0
+
+Released 2026-11-19. Also ships the 1.6.0 and 1.7.0 changes below, which were not released on their own.
 
 Mux now runs on PolyPrompt 4.0. Credentials are API keys only: Mux does not sign in with Claude, ChatGPT,
 or Google accounts, and does not use subscription quotas.
@@ -130,7 +132,7 @@ or Google accounts, and does not use subscription quotas.
   142 passed. The web dashboard was driven in headless Chrome (palette picker, a light palette, the palette
   form) with no script errors.
 
-## 1.7.0 (unreleased)
+## 1.7.0 (not released separately; shipped in 1.8.0)
 
 ### Added
 
@@ -252,7 +254,7 @@ or Google accounts, and does not use subscription quotas.
   always starts the server. Settings files that still contain it load normally, and the field is dropped on
   the next save.
 
-## 1.6.0 (unreleased)
+## 1.6.0 (not released separately; shipped in 1.8.0)
 
 ### Added
 
