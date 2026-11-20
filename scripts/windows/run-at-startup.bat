@@ -51,7 +51,9 @@ if not defined MUX_CONFIG_HOME set "MUX_CONFIG_HOME=%USERPROFILE%\.mux"
 if not exist "%MUX_CONFIG_HOME%" mkdir "%MUX_CONFIG_HOME%"
 if not exist "%MUX_CONFIG_HOME%\startup-registered" echo registered by scripts\windows> "%MUX_CONFIG_HOME%\startup-registered"
 
-reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v MuxAgent /t REG_SZ /d "\"%AGENT_EXE%\"" /f >nul
+REM mux 1.x used the value name MuxAgent; remove it so only one agent starts at login.
+reg delete "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v MuxAgent /f >nul 2>&1
+reg add "HKCU\Software\Microsoft\Windows\CurrentVersion\Run" /v "Mux Agent" /t REG_SZ /d "\"%AGENT_EXE%\"" /f >nul
 if errorlevel 1 (
     echo Error: Failed to write the Run registry key. 1>&2
     exit /b 1

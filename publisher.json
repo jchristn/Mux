@@ -3,9 +3,14 @@
   "project": {
     "name": "mux",
     "displayName": "mux",
+    "identifier": "ai.latticetech.mux",
+    "tagline": "Your AI agent. Your models. Your infra. Anywhere.",
+    "publisher": "Lattice AI, LLC",
+    "publisherUrl": "https://latticetech.ai",
+    "maintainer": "Lattice AI, LLC <hello@latticetech.ai>",
     "repo": "jchristn/mux",
     "homepage": "https://github.com/jchristn/mux",
-    "description": "Multiplexed AI agent — CLI, desktop, and server.",
+    "description": "An open-source AI coding agent for the terminal, desktop, web dashboard, and VS Code, with the models you choose, local or remote, and Mux Cloud for reaching your machines from anywhere.",
     "license": "MIT"
   },
   "build": {
@@ -22,6 +27,7 @@
   "channels": {
     "nuget":         { "enabled": true, "artifact": "cli", "os": "linux", "options": { "vaultRef": "NUGET_API_KEY" } },
     "cli-archive":   { "enabled": true, "driver": "archive", "artifact": "cli", "os": "linux", "runtimes": [ "linux-x64", "linux-arm64" ] },
+    "cli-archive-windows": { "enabled": true, "driver": "archive", "artifact": "cli", "os": "windows", "runtimes": [ "win-arm64" ] },
     "scoop":         { "enabled": true, "artifact": "cli", "os": "windows", "runtimes": [ "win-x64" ], "options": { "bucket": "jchristn/scoop-bucket" } },
     "homebrew":      { "enabled": true, "artifact": "cli", "os": "macos", "runtimes": [ "osx-x64", "osx-arm64" ], "options": { "tap": "jchristn/homebrew-tap" } },
     "homebrew-cask": { "enabled": true, "driver": "homebrew", "artifact": "desktop", "os": "macos", "runtimes": [ "osx-x64", "osx-arm64" ], "options": { "tap": "jchristn/homebrew-tap" } },
@@ -31,17 +37,18 @@
     "winget":        { "enabled": true, "artifact": "desktop", "runtimes": [ "win-x64" ], "options": { "packageId": "jchristn.mux", "vaultRef": "WINGET_TOKEN" } },
     "chocolatey":    { "enabled": true, "artifact": "desktop", "runtimes": [ "win-x64" ], "options": { "vaultRef": "CHOCO_API_KEY" } },
 
-    "dmg":           { "enabled": true, "artifact": "desktop", "runtimes": [ "osx-x64", "osx-arm64" ], "options": { "bundleId": "com.jchristn.mux" } },
+    "pkg":           { "enabled": true, "artifact": "desktop", "runtimes": [ "osx-x64", "osx-arm64" ] },
+    "dmg":           { "enabled": true, "artifact": "desktop", "runtimes": [ "osx-x64", "osx-arm64" ] },
 
     "debrpm":        { "enabled": true, "artifact": "desktop", "runtimes": [ "linux-x64", "linux-arm64" ] },
     "appimage":      { "enabled": true, "artifact": "desktop", "runtimes": [ "linux-x64", "linux-arm64" ] },
     "apt":           { "enabled": true, "artifact": "desktop", "runtimes": [ "linux-x64" ], "options": { "suite": "stable", "component": "main" } },
     "yum":           { "enabled": true, "artifact": "desktop", "runtimes": [ "linux-x64" ] },
     "snap":          { "enabled": false, "artifact": "desktop", "runtimes": [ "linux-x64" ], "options": { "confinement": "classic" } },
-    "flatpak":       { "enabled": false, "artifact": "desktop", "runtimes": [ "linux-x64" ], "options": { "appId": "com.jchristn.mux" } }
+    "flatpak":       { "enabled": false, "artifact": "desktop", "runtimes": [ "linux-x64" ], "options": { "appId": "ai.latticetech.mux" } }
   },
   "signing": {
-    "//": "No paid code-signing certificates. Windows installers ship unsigned (SmartScreen warns) and the macOS .dmg ships unsigned (Gatekeeper requires a manual right-click -> Open). Linux repo metadata is signed with a free, self-generated GPG key. To enable Windows/macOS signing later, restore 'windows'/'macOs' entries here and add the matching secrets.",
+    "//": "No paid code-signing certificates, by policy (see ~/Code/Agents/requirements/INSTALLERS.md). Windows installers ship unsigned (SmartScreen: More info, Run anyway). macOS apps are ad-hoc signed (codesign --sign -), which Apple silicon requires, and are not notarized (Privacy & Security, Open Anyway). Linux repo metadata is signed with a free, self-generated GPG key. To enable paid signing later, add 'windows'/'macOs' entries here and the matching secrets.",
     "linux":   { "vaultRef": "GPG_SIGNING", "notarize": false }
   },
   "releaseNotes": { "source": "CHANGELOG.md", "section": "## {version}" }

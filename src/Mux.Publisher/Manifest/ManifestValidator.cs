@@ -49,6 +49,12 @@ namespace Mux.Publisher.Manifest
                 errors.Add("project.name is required.");
             }
 
+            if (!string.IsNullOrWhiteSpace(manifest.Project.Identifier)
+                && !System.Text.RegularExpressions.Regex.IsMatch(manifest.Project.Identifier, "^[a-z0-9]+(\\.[a-z0-9-]+)+$"))
+            {
+                errors.Add("project.identifier must be lowercase reverse-DNS, for example ai.latticetech.mux. Found: '" + manifest.Project.Identifier + "'.");
+            }
+
             if (manifest.Build.Artifacts.Count == 0)
             {
                 errors.Add("build.artifacts must declare at least one artifact.");

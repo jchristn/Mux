@@ -1,13 +1,30 @@
 # Changelog
 
-All notable changes to mux are documented here.
+All notable changes to mux are documented here. Each release has a `## [<version>] - <date>` section; work not yet
+released goes under `## [Unreleased]`.
 
-## 2.0.0 (unreleased)
+## [Unreleased]
 
-2.0.0 adds Mux Cloud.
+## [2.0.0] - 2026-11-19
+
+2.0.0 adds Mux Cloud, a macOS `.pkg` installer, and installers that follow one standard on every OS.
 
 ### Added
 
+- **macOS `.pkg` installer (recommended).** It installs `mux.app` into Applications, links `mux` into
+  `/usr/local/bin`, and installs and starts the tray agent's LaunchAgent for the signed-in user. Installer.app shows
+  the logo (with a dark-mode variant), a welcome page with the tagline and what gets installed, and the MIT license,
+  which must be agreed to. The `.dmg` gains an Applications shortcut and an `If mux won't open.txt` note.
+- **Branded installers.** The Windows installer shows the logo, a welcome page with the tagline and what gets
+  installed, and Lattice AI, LLC as the publisher, and starts the tray agent as the signed-in user. The `.deb` and
+  `.rpm` declare their runtime dependencies (ICU, OpenSSL, X11 client libraries, fontconfig), install hicolor icons,
+  the license, a menu entry, and an `/etc/xdg/autostart` entry for the tray agent. The AppImage carries its icon and
+  `.DirIcon`. Logo sources: `assets/logo.svg`, `assets/icon.svg`, `assets/icon-1024.png`.
+- **Release pipeline.** Pushing a `v<version>` tag builds every installer on Windows, macOS, and Linux, installs each
+  one and runs `mux --version`, then publishes one GitHub Release titled "Mux <version>" with one `SHA256SUMS` and notes
+  that open with install steps for unsigned builds. A failure on any OS publishes nothing. Running the workflow by hand
+  is a dry run. Package-manager channels run after the release only when `ENABLE_PACKAGE_MANAGERS` is set.
+  `INSTALL.md` and root `build-installers.sh` / `build-installers.bat` are new.
 - **Show or hide what you typed in password and key fields, everywhere.** The web dashboard (Mux Cloud sign-in, the
   REST API key, endpoint API keys, MCP secrets) and the desktop app (Mux Cloud sign-in, endpoint, MCP, and search
   provider keys) have an eye button inside each field, with translated labels. VS Code's Mux Cloud sign-in has an eye
@@ -64,6 +81,10 @@ All notable changes to mux are documented here.
 
 ### Changed
 
+- **New identifier: `ai.latticetech.mux`.** The macOS bundle and LaunchAgent (`ai.latticetech.mux.agent`), the Linux
+  autostart entry and systemd user unit, and the Windows `Run` value (`Mux Agent`) use the new names. Upgrading from
+  1.x moves an existing login registration (`com.jchristn.mux.agent`, `MuxAgent`, `mux-agent`) to the new name, so
+  only one agent starts. The Windows installer keeps its AppId and upgrades 1.x in place.
 - The dashboard builds every API and WebSocket URL under a base path, and renders without the local API key
   when served through Mux Cloud.
 - `settings.json` is rewritten on load only when normalization changed it.
@@ -79,7 +100,7 @@ All notable changes to mux are documented here.
 - `PUT /v1.0/api/settings` no longer resets fields the body leaves out: a partial body is merged onto the current
   settings.
 
-## 1.8.0
+## [1.8.0] - 2026-11-19
 
 Released 2026-11-19. Also ships the 1.6.0 and 1.7.0 changes below, which were not released on their own.
 
@@ -209,7 +230,7 @@ or Google accounts, and does not use subscription quotas.
   142 passed. The web dashboard was driven in headless Chrome (palette picker, a light palette, the palette
   form) with no script errors.
 
-## 1.7.0 (not released separately; shipped in 1.8.0)
+## [1.7.0] (not released separately; shipped in 1.8.0)
 
 ### Added
 
@@ -331,7 +352,7 @@ or Google accounts, and does not use subscription quotas.
   always starts the server. Settings files that still contain it load normally, and the field is dropped on
   the next save.
 
-## 1.6.0 (not released separately; shipped in 1.8.0)
+## [1.6.0] (not released separately; shipped in 1.8.0)
 
 ### Added
 
@@ -437,7 +458,7 @@ or Google accounts, and does not use subscription quotas.
   download example, and the `Mux.Server` package README example. Added CI and NuGet
   badges to `README.md`.
 
-## 1.5.0
+## [1.5.0] - 2026-10-15
 
 ### Added
 
@@ -454,7 +475,7 @@ or Google accounts, and does not use subscription quotas.
 - The AutoSafe approval allowlist (`AgentLoopOptions.AutoSafeApprovalAllowlist`) accepts glob patterns with the
   `--allow-tools` syntax, not only exact tool names.
 
-## 1.4.1
+## [1.4.1]
 
 ### Fixed
 
@@ -513,7 +534,7 @@ or Google accounts, and does not use subscription quotas.
 - Web telemetry tooltips stay inside the visible conversation area, flip below icons near the top, and fit
   narrow windows. Hover and keyboard focus open them; transcript scrolling and window resizing close them.
 
-## 1.4.0
+## [1.4.0] - 2026-10-10
 
 ### Added
 
@@ -531,7 +552,7 @@ or Google accounts, and does not use subscription quotas.
   workflows change, weekly, and on demand, so packaging failures show up before a release. The release workflow
   gains a `publish` input (on by default) and can be called from other workflows.
 
-## 1.3.2
+## [1.3.2] - 2026-10-10
 
 ### Changed
 
@@ -540,7 +561,7 @@ or Google accounts, and does not use subscription quotas.
   in both the normal prompt and the prompt used when the endpoint has no tools. Prompt profiles with a custom
   system prompt are unchanged.
 
-## 1.3.1
+## [1.3.1] - 2026-10-10
 
 ### Fixed
 
@@ -550,7 +571,7 @@ or Google accounts, and does not use subscription quotas.
   you send until the turn ends, including while the checkpoint and `@` mentions are prepared, and clicking it
   cancels the turn. Esc in the message box also stops a running turn.
 
-## 1.3.0
+## [1.3.0] - 2026-10-10
 
 Fixes for tools that run `mux print` headless, found while integrating mux into Garrison.
 
@@ -591,7 +612,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   which the Homebrew formula and Scoop manifest expect. Desktop archives are named `mux-desktop-<version>-<rid>`,
   so they no longer overwrite the CLI archive of the same runtime and invalidate the formula's checksum.
 
-## 1.2.0
+## [1.2.0] - 2026-10-09
 
 ### Added
 
@@ -965,7 +986,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   `DefaultSkills` cases (playbook builder, no em-dashes, colon headings) and a `SkillCommand` case for
   `mux skill trust`.
 
-## 1.1.1
+## [1.1.1]
 
 ### Changed
 
@@ -994,7 +1015,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   local mock server now records request query strings.
 - Automated (net8.0 and net10.0), xUnit, and NUnit runners all pass.
 
-## 1.1.0
+## [1.1.0]
 
 ### Added
 
@@ -1045,7 +1066,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
 - `RunProcessTool.TimeoutKillsProcess` now uses `sleep 30` on macOS/Linux (`ping -n 30` only counts pings on
   Windows, so the test could never time out elsewhere).
 
-## 1.0.3
+## [1.0.3]
 
 ### Fixed
 
@@ -1062,7 +1083,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   reverse order and a denied call's result names every `functionResponse` after its function, both live and
   after the session JSON round trip.
 
-## 1.0.2
+## [1.0.2]
 
 ### Fixed
 
@@ -1089,7 +1110,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
 - `CoreMapping.ToolCallThoughtSignatureSurvivesDto`: signed and unsigned calls round-trip through
   `ChatMessageMapper`.
 
-## 1.0.1
+## [1.0.1]
 
 ### Fixed
 
@@ -1110,7 +1131,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   server gains a `fail_tool` that always throws, and a new `ExecuteAsyncToolErrorResultIsFailure` case covers
   handler errors becoming failed results while normal results on the same connection still succeed.
 
-## 1.0.0
+## [1.0.0]
 
 ### Added
 
@@ -1155,7 +1176,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
 - **First stable release.** All shipping components are versioned `1.0.0`, and the reusable libraries
   (`Mux.Core`, `Mux.Server`, `Mux.Desktop.Core`) are packaged for NuGet with symbol packages.
 
-## 0.12.3
+## [0.12.3]
 
 ### Added
 
@@ -1218,7 +1239,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   renamed (`openPrice`/`priceFields`/`delPrice`) so the Prompts row and add button open the prompt editor, and
   a regression test now fails if any duplicate management-function name is reintroduced.
 
-## 0.12.2
+## [0.12.2]
 
 ### Fixed
 
@@ -1252,7 +1273,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   - Because a stale tray-agent hub runs the old bridge and silently breaks this sync, the product version bump
     forces the agent launcher to replace an older running hub with this build.
 
-## 0.12.0
+## [0.12.0]
 
 ### Added
 
@@ -1291,7 +1312,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   API-key scheme is declared and advertised on every operation. Both doc routes are unauthenticated (reachable
   without a key even when one is configured), so a client can discover the surface before authenticating.
 
-## 0.11.0
+## [0.11.0]
 
 ### Added
 
@@ -1338,7 +1359,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
     chat prompt the browser for approval (streamed over SSE, answered via `POST /v1.0/api/chat/approve`)
     instead of being auto-denied. The default remains read-only (mutating tools denied).
 
-## 0.10.0
+## [0.10.0]
 
 ### Added
 
@@ -1468,7 +1489,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   to a topbar status pill and the standalone Server Info tab was removed. Helpful empty states, auto-focus,
   and refined styling throughout.
 
-## v0.9.0 (2026-09-07)
+## [0.9.0] - 2026-09-07
 
 ### Added
 
@@ -1575,7 +1596,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   This also removes intermittent CI failures in the in-process CLI test suites, where dense back-to-back mock
   servers occasionally triggered a transient loopback refusal.
 
-## v0.8.0 - 2026-08-12
+## [0.8.0] - 2026-08-12
 
 ### Added
 
@@ -1606,7 +1627,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
 
 - Bumped the PolyPrompt dependency to `2.2.0` for reasoning-effort control and reasoning ("thinking") capture.
 
-## v0.7.0 - 2026-08-07
+## [0.7.0] - 2026-08-07
 
 ### Added
 
@@ -1671,7 +1692,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
 - **Version string.** `mux --version` now reports the current release; the compiled `ProductVersion`
   constant had lagged the changelog.
 
-## v0.6.0 - 2026-08-04
+## [0.6.0] - 2026-08-04
 
 ### Added
 
@@ -1690,7 +1711,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   switching transports no longer leaves the other transport's stale values on screen. Only the fields
   relevant to the chosen transport are collected and persisted.
 
-## v0.5.0 - 2026-07-31
+## [0.5.0] - 2026-07-31
 
 ### Added
 
@@ -1706,7 +1727,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   workspace write lease, gated by `taskParallelismEnabled` (default false). The engine is complete and
   tested; wiring it into the interactive submit path is a planned follow-up.
 
-## v0.4.0 - 2026-07-31
+## [0.4.0] - 2026-07-31
 
 ### Added
 
@@ -1785,7 +1806,7 @@ Fixes for tools that run `mux print` headless, found while integrating mux into 
   otherwise) were shown as offline with no tools. Upgraded Voltaic to `0.4.0`, which sends the compliant
   `Accept` header (verified end-to-end against a real server discovering all of its tools).
 
-## v0.3.0 - 2026-07-29
+## [0.3.0] - 2026-07-29
 
 This release rebuilds the mux interactive front-end on
 [TUIKit](https://www.nuget.org/packages/TUIKit), introduces a concurrent background-job model, and
@@ -1894,7 +1915,7 @@ unaffected.
 - Added a GitHub Actions workflow that builds `src/Mux.sln` and runs all three test runners on Linux and
   Windows.
 
-## v0.2.0 - 2026-04-24
+## [0.2.0] - 2026-04-24
 
 ### Added
 
@@ -1930,7 +1951,7 @@ unaffected.
 - Added `QueuedMessageManager` unit coverage for FIFO dequeue, newest-item editing/removal, and queue clearing
 - Verified with `dotnet test src\Mux.sln --nologo`
 
-## v0.1.0 - 2026-03-31
+## [0.1.0] - 2026-03-31
 
 ### Added
 

@@ -37,11 +37,13 @@ signal_all() {
 echo "Stopping mux processes..."
 # A launchd-managed agent (run-at-startup.sh) restarts after a signal; stop it through launchd first.
 # bootout unloads it until the next login; the plist stays, so it still starts at login.
-if launchctl print "gui/$(id -u)/com.jchristn.mux.agent" >/dev/null 2>&1; then
-    launchctl bootout "gui/$(id -u)/com.jchristn.mux.agent" 2>/dev/null || true
-    echo "Stopped the launchd-managed agent (it starts again at the next login)."
-    sleep 1
-fi
+for label in ai.latticetech.mux.agent com.jchristn.mux.agent; do
+    if launchctl print "gui/$(id -u)/$label" >/dev/null 2>&1; then
+        launchctl bootout "gui/$(id -u)/$label" 2>/dev/null || true
+        echo "Stopped the launchd-managed agent (it starts again at the next login)."
+        sleep 1
+    fi
+done
 if ! running; then
     echo "No mux processes are running."
     exit 0

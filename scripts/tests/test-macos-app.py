@@ -134,7 +134,7 @@ if name == 'dotnet' and args[0] == 'publish':
     # registers that copy; remove-from-startup unregisters it and leaves the app alone.
     for leftover in system.iterdir():
         shutil.rmtree(leftover)
-    plist_path = temp / 'home/Library/LaunchAgents/com.jchristn.mux.agent.plist'
+    plist_path = temp / 'home/Library/LaunchAgents/ai.latticetech.mux.agent.plist'
     agent_bin = temp / 'home/Applications/Mux Agent.app/Contents/MacOS/Mux.Agent'
     result, calls = run('run-at-startup', 'net8.0', SUDO_OK='1')
     assert result.returncode == 0, result.stderr

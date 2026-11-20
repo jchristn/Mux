@@ -33,10 +33,10 @@ if name == 'pgrep':
     sys.exit(0 if os.environ.get('MOCK_RUNNING') or (match and any(match in a for a in args)) else 1)
 if name in ('launchctl', 'systemctl'):
     # Never touch the real launchd/systemd: report "not loaded / no user manager", or with MOCK_SYSTEMD
-    # a user manager whose graphical session is up and whose mux-agent unit is not running.
+    # a user manager whose graphical session is up and whose ai.latticetech.mux.agent unit is not running.
     with open(os.environ['CALL_LOG'], 'a') as f: f.write(json.dumps([name, *args]) + '\\n')
     if name == 'systemctl' and os.environ.get('MOCK_SYSTEMD'):
-        sys.exit(1 if 'is-active' in args and args[-1] == 'mux-agent' else 0)
+        sys.exit(1 if 'is-active' in args and args[-1] == 'ai.latticetech.mux.agent' else 0)
     sys.exit(1)
 if name == 'cmd.exe':
     print('C:\\\\Users\\\\test\\\\AppData\\\\Roaming\\r'); sys.exit(0)
@@ -268,13 +268,13 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     p, calls = run('linux', 'run-at-startup', 'net8.0', MUX_SYSTEM_INSTALL='1', SUDO_LOG=str(sudo_log))
     assert p.returncode == 0, p.stderr
     check_user_agent_install(calls, 'net8.0')
-    desktop = (home / '.config/autostart/mux-agent.desktop').read_text()
+    desktop = (home / '.config/autostart/ai.latticetech.mux.agent.desktop').read_text()
     assert f'Exec=env MUX_AGENT_AUTOSTART=0 "{installed}"\n' in desktop, desktop
     assert 'DOTNET_ROOT' not in desktop, desktop
     assert (home / '.mux/startup-registered').exists()
     (home / '.mux/startup-registered').unlink()
     p, _ = run('linux', 'remove-from-startup')
-    assert p.returncode == 0 and not (home / '.config/autostart/mux-agent.desktop').exists()
+    assert p.returncode == 0 and not (home / '.config/autostart/ai.latticetech.mux.agent.desktop').exists()
     assert installed.is_file(), 'remove-from-startup leaves the installed agent alone'
     assert (home / '.mux/startup-registered').exists()  # the agent must not re-register itself afterwards
     p, _ = run('linux', 'remove-from-startup')
@@ -285,25 +285,25 @@ with tempfile.TemporaryDirectory(prefix='mux scripts ') as temp:
     odd_bin = odd / 'mux/apps/agent/Mux.Agent'
     p, calls = run('linux', 'run-at-startup', 'net10.0', MOCK_SYSTEMD='1', XDG_DATA_HOME=str(odd))
     assert p.returncode == 0, p.stderr
-    service = (home / '.config/systemd/user/mux-agent.service').read_text()
+    service = (home / '.config/systemd/user/ai.latticetech.mux.agent.service').read_text()
     systemd_path = str(odd_bin).replace('%', '%%').replace('$', '$$')
     assert f'ExecStart="{systemd_path}"\n' in service and 'Environment=MUX_AGENT_AUTOSTART=0\n' in service, service
     assert 'DOTNET_ROOT' not in service and odd_bin.is_file(), service
     ran = [json.loads(x) for x in log.read_text().splitlines()]
-    assert ['systemctl', '--user', 'enable', 'mux-agent'] in ran and ['systemctl', '--user', 'restart', 'mux-agent'] in ran, ran
+    assert ['systemctl', '--user', 'enable', 'ai.latticetech.mux.agent'] in ran and ['systemctl', '--user', 'restart', 'ai.latticetech.mux.agent'] in ran, ran
     p, _ = run('linux', 'run-at-startup', 'net10.0', XDG_DATA_HOME=str(odd))  # no systemd: autostart entry
-    assert p.returncode == 0 and not (home / '.config/systemd/user/mux-agent.service').exists(), p.stderr
-    desktop = (home / '.config/autostart/mux-agent.desktop').read_text()
+    assert p.returncode == 0 and not (home / '.config/systemd/user/ai.latticetech.mux.agent.service').exists(), p.stderr
+    desktop = (home / '.config/autostart/ai.latticetech.mux.agent.desktop').read_text()
     assert 'Exec=env MUX_AGENT_AUTOSTART=0 "%s"\n' % str(odd_bin).replace('$', '\\\\$').replace('%', '%%') in desktop, desktop
     p, _ = run('linux', 'remove-from-startup', MOCK_SYSTEMD='1')
-    assert p.returncode == 0 and odd_bin.is_file() and not (home / '.config/autostart/mux-agent.desktop').exists()
+    assert p.returncode == 0 and odd_bin.is_file() and not (home / '.config/autostart/ai.latticetech.mux.agent.desktop').exists()
     shutil.rmtree(odd)
     # A running agent is never replaced: nothing is built, installed or registered.
     for platform in ['linux', 'wsl', 'wsl2']:
         p, calls = run(platform, 'run-at-startup', MOCK_RUNNING='1')
         assert p.returncode != 0 and 'Another mux agent is running' in p.stderr and f'scripts/{platform}/kill-mux.sh' in p.stderr, p.stderr
         assert not [c for c in calls if c[1] in ('publish', 'build')], calls
-        assert not (home / '.config/autostart/mux-agent.desktop').exists()
+        assert not (home / '.config/autostart/ai.latticetech.mux.agent.desktop').exists()
     shutil.rmtree(share / 'mux')
     for leftover in ['applications/mux-agent.desktop', 'icons/hicolor/256x256/apps/mux.png']:
         (share / leftover).unlink()

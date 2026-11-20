@@ -27,25 +27,27 @@ MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
 
-SERVICE="$HOME/.config/systemd/user/mux-agent.service"
-DESKTOP="$HOME/.config/autostart/mux-agent.desktop"
 did=0
 
 if wsl_startup_remove mux-agent; then
     did=1
 fi
-if [ -f "$SERVICE" ]; then
-    systemctl --user disable --now mux-agent >/dev/null 2>&1 || true
-    rm -f "$SERVICE"
-    systemctl --user daemon-reload >/dev/null 2>&1 || true
-    echo "Removed the mux-agent systemd user service."
-    did=1
-fi
-if [ -f "$DESKTOP" ]; then
-    rm -f "$DESKTOP"
-    echo "Removed the desktop autostart entry."
-    did=1
-fi
+for unit in ai.latticetech.mux.agent mux-agent; do
+    SERVICE="$HOME/.config/systemd/user/$unit.service"
+    DESKTOP="$HOME/.config/autostart/$unit.desktop"
+    if [ -f "$SERVICE" ]; then
+        systemctl --user disable --now "$unit" >/dev/null 2>&1 || true
+        rm -f "$SERVICE"
+        systemctl --user daemon-reload >/dev/null 2>&1 || true
+        echo "Removed the $unit systemd user service."
+        did=1
+    fi
+    if [ -f "$DESKTOP" ]; then
+        rm -f "$DESKTOP"
+        echo "Removed the desktop autostart entry."
+        did=1
+    fi
+done
 
 if [ "$did" -eq 0 ]; then
     echo "The agent is not registered to run at login; nothing to do."

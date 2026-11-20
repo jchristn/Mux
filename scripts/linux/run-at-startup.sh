@@ -40,8 +40,8 @@ shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || die "Unexpected argument: $1"
 
 # Stop a systemd-managed agent first so the install can replace it (re-running is a refresh).
-if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet mux-agent 2>/dev/null; then
-    systemctl --user stop mux-agent
+if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet ai.latticetech.mux.agent 2>/dev/null; then
+    systemctl --user stop ai.latticetech.mux.agent
 fi
 native_check_libs error "The mux agent" "$NATIVE_AVALONIA_LIBS"
 if pgrep -u "$(id -u)" -x Mux.Agent >/dev/null 2>&1; then
@@ -58,8 +58,15 @@ MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
 
-SERVICE="$HOME/.config/systemd/user/mux-agent.service"
-DESKTOP="$HOME/.config/autostart/mux-agent.desktop"
+SERVICE="$HOME/.config/systemd/user/ai.latticetech.mux.agent.service"
+DESKTOP="$HOME/.config/autostart/ai.latticetech.mux.agent.desktop"
+# mux 1.x registered the agent as mux-agent; remove that so only one agent starts at login.
+if [ -f "$HOME/.config/systemd/user/mux-agent.service" ]; then
+    systemctl --user disable --now mux-agent >/dev/null 2>&1 || true
+    rm -f "$HOME/.config/systemd/user/mux-agent.service"
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+fi
+rm -f "$HOME/.config/autostart/mux-agent.desktop"
 
 # systemd only when this desktop actually starts graphical-session.target (GNOME and KDE do; XFCE,
 # MATE, Cinnamon, LXQt and bare window managers usually don't). Otherwise use a desktop autostart entry.
@@ -68,7 +75,7 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet gr
     SYSTEMD_BIN="${AGENT_BIN//%/%%}"
     SYSTEMD_BIN="${SYSTEMD_BIN//\$/\$\$}"
     # Drop links from an older unit (WantedBy=default.target) before rewriting it.
-    systemctl --user disable mux-agent >/dev/null 2>&1 || true
+    systemctl --user disable ai.latticetech.mux.agent >/dev/null 2>&1 || true
     rm -f "$DESKTOP"
     mkdir -p "$(dirname "$SERVICE")"
     {
@@ -88,15 +95,15 @@ if command -v systemctl >/dev/null 2>&1 && systemctl --user is-active --quiet gr
         echo "WantedBy=graphical-session.target"
     } > "$SERVICE"
     systemctl --user daemon-reload
-    systemctl --user enable mux-agent
-    systemctl --user restart mux-agent
-    echo "Installed and started the mux-agent systemd user service (it runs the REST server)."
-    echo "Check it with: systemctl --user status mux-agent"
+    systemctl --user enable ai.latticetech.mux.agent
+    systemctl --user restart ai.latticetech.mux.agent
+    echo "Installed and started the ai.latticetech.mux.agent systemd user service (it runs the REST server)."
+    echo "Check it with: systemctl --user status ai.latticetech.mux.agent"
     echo "It starts with your desktop session (graphical-session.target); the agent needs a display."
 else
     # Replace a systemd unit from an earlier run, so the agent does not start twice.
     if [ -f "$SERVICE" ]; then
-        systemctl --user disable --now mux-agent >/dev/null 2>&1 || true
+        systemctl --user disable --now ai.latticetech.mux.agent >/dev/null 2>&1 || true
         rm -f "$SERVICE"
         systemctl --user daemon-reload >/dev/null 2>&1 || true
     fi

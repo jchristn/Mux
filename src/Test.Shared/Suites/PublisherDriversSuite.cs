@@ -47,6 +47,16 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("NeedsAddPath", iss.Content, "adds the install dir to PATH");
                         MuxAssert.IsTrue(HasCommand(plan, "iscc"), "compiles with iscc");
                         MuxAssert.IsTrue(HasCommand(plan, "signtool"), "signs with signtool");
+                        MuxAssert.Contains("AppPublisher=Lattice AI, LLC", iss.Content, "publisher");
+                        MuxAssert.Contains("AppPublisherURL=https://latticetech.ai", iss.Content, "publisher URL");
+                        MuxAssert.Contains("WizardImageFile=", iss.Content, "welcome image");
+                        MuxAssert.Contains("wizard-328x604.bmp", iss.Content, "high-DPI welcome image");
+                        MuxAssert.Contains("WizardSmallImageFile=", iss.Content, "small image");
+                        MuxAssert.Contains("WelcomeLabel2=Your AI agent. Your models. Your infra. Anywhere.%n%n", iss.Content, "welcome tagline");
+                        MuxAssert.Contains("the mux command (added to your PATH)", iss.Content, "welcome says what is installed");
+                        MuxAssert.Contains("Mux.Agent.exe\"; Flags: nowait runasoriginaluser", iss.Content, "starts the agent unelevated");
+                        MuxAssert.Contains("[UninstallRun]", iss.Content, "stops the agent before uninstalling");
+                        MuxAssert.Contains("AppId={{" + StableGuid.FromString("inno:mux") + "}", iss.Content, "AppId unchanged so upgrades replace 1.x");
                         MuxAssert.AreEqual(TargetOs.Windows, new InnoSetupDriver().RequiredOs, "requires windows");
                     }),
 
@@ -127,6 +137,57 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("TEXT", sla.Content, "SLA carries the license text resource");
                         // The tray agent and CLI ride inside the .app bundle.
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "chmod", "Mux.Agent"), "marks the bundled tray agent executable");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "codesign", "--verify"), "verifies the bundle signature");
+                        MuxAssert.Contains("ai.latticetech.mux", plist.Content, "bundle id is the project identifier");
+                    }),
+
+                    Case("DmgUnsignedAdHocSignsWithShortcutAndNote", "an unsigned dmg is ad-hoc signed and carries the Applications shortcut and the Gatekeeper note", () =>
+                    {
+                        ChannelConfig cfg = Cfg("desktop", "osx-arm64");
+                        PublisherContext ctx = Ctx(ArtifactKind.Gui, cfg, false, "osx-arm64");
+                        ChannelPlan plan = new DmgDriver().Plan(ctx, cfg);
+                        ShellCommand sign = plan.Commands.Find(c => c.Executable == "codesign" && c.Arguments.Contains("--sign"))!;
+                        MuxAssert.IsTrue(sign != null && sign.Arguments.Contains("-"), "ad-hoc identity");
+                        MuxAssert.IsFalse(HasCommandWithArg(plan, "xcrun", "notarytool"), "no notarization without a certificate");
+                        int signAt = plan.Commands.IndexOf(sign!);
+                        int lastBundleStep = plan.Commands.FindLastIndex(c => c.Executable == "chmod" || c.Executable == "cp" || c.Executable == "sh");
+                        MuxAssert.IsTrue(signAt > lastBundleStep, "signs after every file is in place");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "sh", "move-non-code.sh"), "moves non-code files out of Contents/MacOS before signing");
+                        MuxAssert.AreEqual(MacAppBundle.MoveNonCodeScript, Find(plan, "move-non-code.sh").Content, "the script is staged as a file, so $VAR expansion leaves it alone");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "ln", "/Applications"), "adds the Applications shortcut");
+                        GeneratedFile note = Find(plan, "If mux won't open.txt");
+                        MuxAssert.Contains("Open Anyway", note.Content, "note has the Gatekeeper steps");
+                        MuxAssert.Contains("xattr -dr com.apple.quarantine /Applications/mux.app", note.Content, "note has the Terminal route");
+                        MuxAssert.Contains("/usr/local/bin/mux", note.Content, "note explains the PATH link");
+                    }),
+
+                    Case("PkgBuildsInstallerWithPostinstall", "pkg builds a product archive with branding, license, PATH link, and the agent LaunchAgent", () =>
+                    {
+                        ChannelConfig cfg = Cfg("desktop", "osx-arm64");
+                        PublisherContext ctx = Ctx(ArtifactKind.Gui, cfg, false, "osx-arm64");
+                        ChannelPlan plan = new PkgDriver().Plan(ctx, cfg);
+                        GeneratedFile dist = Find(plan, "distribution.xml");
+                        MuxAssert.Contains("<title>mux</title>", dist.Content, "titled with the product name");
+                        MuxAssert.Contains("<background file=\"pkg-background.png\" alignment=\"bottomleft\" scaling=\"none\"/>", dist.Content, "logo background");
+                        MuxAssert.Contains("<background-darkAqua", dist.Content, "dark mode background");
+                        MuxAssert.Contains("<license file=\"license.txt\"", dist.Content, "license to agree to");
+                        MuxAssert.Contains("<welcome file=\"welcome.html\"", dist.Content, "welcome page");
+                        MuxAssert.Contains("hostArchitectures=\"arm64\"", dist.Content, "arm64 host");
+                        MuxAssert.Contains("Your AI agent. Your models. Your infra. Anywhere.", Find(plan, "welcome.html").Content, "welcome shows the tagline");
+                        MuxAssert.Contains("Permission is hereby granted", Find(plan, "resources/license.txt").Content, "license text");
+                        GeneratedFile post = Find(plan, "scripts/postinstall");
+                        MuxAssert.Contains("mkdir -p /usr/local/bin", post.Content, "creates /usr/local/bin first");
+                        MuxAssert.Contains("ln -sf \"$APP/Contents/MacOS/mux\" /usr/local/bin/mux", post.Content, "links the command");
+                        MuxAssert.Contains("launchctl bootout \"gui/$USER_ID/com.jchristn.mux.agent\"", post.Content, "removes the 1.x agent");
+                        MuxAssert.Contains("<string>ai.latticetech.mux.agent</string>", post.Content, "LaunchAgent label");
+                        MuxAssert.Contains("/Applications/mux.app/Contents/MacOS/Mux.Agent", post.Content, "LaunchAgent runs the bundled agent");
+                        MuxAssert.Contains("launchctl bootstrap", post.Content, "starts the agent");
+                        MuxAssert.IsFalse(post.Content.Contains("\r"), "LF line endings");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "plutil", "BundleIsRelocatable"), "turns off relocation");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "pkgbuild", "ai.latticetech.mux"), "component identifier");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "productbuild", "mux-" + Version + "-osx-arm64.pkg"), "builds the named .pkg");
+                        MuxAssert.Contains("ai.latticetech.mux", Find(plan, "Info.plist").Content, "bundle id");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "codesign", "-"), "ad-hoc signs the app");
                     }),
 
                     Case("HomebrewCaskForGuiFormulaForCli", "Homebrew renders a cask for GUI and a formula for CLI", () =>
@@ -159,6 +220,19 @@ namespace Test.Shared.Suites
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "ln", "/opt/mux/mux"), "symlinks the CLI into /usr/bin");
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "chmod", "Mux.Agent"), "marks the bundled tray agent executable");
                         MuxAssert.Contains("Mux.Desktop", desktop.Content, "desktop entry launches the GUI");
+                        MuxAssert.Contains("Icon=ai.latticetech.mux", desktop.Content, "menu entry icon by identifier");
+                        GeneratedFile autostart = Find(plan, "etc/xdg/autostart/ai.latticetech.mux.agent.desktop");
+                        MuxAssert.Contains("Exec=/opt/mux/Mux.Agent", autostart.Content, "autostart runs the tray agent");
+                        MuxAssert.Contains("Permission is hereby granted", Find(plan, "usr/share/doc/mux/copyright").Content, "deb license");
+                        MuxAssert.Contains("Permission is hereby granted", Find(plan, "usr/share/licenses/mux/LICENSE").Content, "rpm license");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "cp", "hicolor/256x256/apps/ai.latticetech.mux.png"), "installs hicolor icons");
+                        ShellCommand deb = plan.Commands.Find(c => c.Executable == "fpm" && c.Arguments.Contains("deb"))!;
+                        ShellCommand rpm = plan.Commands.Find(c => c.Executable == "fpm" && c.Arguments.Contains("rpm"))!;
+                        MuxAssert.IsTrue(deb.Arguments.Exists(a => a.StartsWith("libicu", StringComparison.Ordinal)), "deb declares ICU");
+                        MuxAssert.IsTrue(deb.Arguments.Contains("libfontconfig1"), "deb declares fontconfig");
+                        MuxAssert.IsTrue(rpm.Arguments.Contains("libicu") && rpm.Arguments.Contains("libX11"), "rpm declares ICU and X11");
+                        MuxAssert.IsTrue(deb.Arguments.Contains("Lattice AI, LLC"), "vendor is the publisher");
+                        MuxAssert.IsTrue(deb.Arguments.Exists(a => a.StartsWith("Your AI agent.", StringComparison.Ordinal)), "description starts with the tagline");
                     }),
 
                     Case("AppImagePacksSingleFile", "appimage assembles an AppDir and packs it", () =>
@@ -170,6 +244,9 @@ namespace Test.Shared.Suites
                         MuxAssert.Contains("exec ", appRun.Content, "AppRun execs the binary");
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "env", "appimagetool"), "packs with appimagetool");
                         MuxAssert.IsTrue(HasCommandWithArg(plan, "env", "ARCH=x86_64"), "sets ARCH for x64");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "env", "APPIMAGE_EXTRACT_AND_RUN=1"), "runs appimagetool without FUSE");
+                        MuxAssert.Contains("Icon=ai.latticetech.mux", Find(plan, "ai.latticetech.mux.desktop").Content, "top-level desktop entry");
+                        MuxAssert.IsTrue(HasCommandWithArg(plan, "cp", ".DirIcon"), "adds .DirIcon");
                     }),
 
                     Case("AppImageSetsArchPerRuntime", "appimage passes ARCH to appimagetool for each runtime it packs", () =>
@@ -206,7 +283,7 @@ namespace Test.Shared.Suites
 
                     Case("RegistryResolvesAllChannelsAndRejectsUnknown", "the driver registry knows every channel", () =>
                     {
-                        foreach (string channel in new[] { "nuget", "scoop", "homebrew", "inno", "wix", "winget", "chocolatey", "dmg", "debrpm", "appimage", "apt", "yum", "snap", "flatpak" })
+                        foreach (string channel in new[] { "nuget", "scoop", "homebrew", "inno", "wix", "winget", "chocolatey", "dmg", "pkg", "debrpm", "appimage", "apt", "yum", "snap", "flatpak" })
                         {
                             MuxAssert.IsTrue(DriverRegistry.IsKnown(channel), "knows " + channel);
                             MuxAssert.IsNotNull(DriverRegistry.Resolve(channel), "resolves " + channel);
@@ -465,6 +542,11 @@ namespace Test.Shared.Suites
 
         private static PublisherContext Ctx(ArtifactKind kind, ChannelConfig cfg, params string[] rids)
         {
+            return Ctx(kind, cfg, true, rids);
+        }
+
+        private static PublisherContext Ctx(ArtifactKind kind, ChannelConfig cfg, bool signed, params string[] rids)
+        {
             PublisherManifest manifest = new PublisherManifest();
             manifest.Project = new ProjectInfo
             {
@@ -473,13 +555,16 @@ namespace Test.Shared.Suites
                 Repo = "jchristn/mux",
                 Homepage = "https://github.com/jchristn/mux",
                 Description = "Multiplexed AI agent.",
+                Tagline = "Your AI agent. Your models. Your infra. Anywhere.",
+                Publisher = "Lattice AI, LLC",
+                PublisherUrl = "https://latticetech.ai",
                 License = "MIT"
             };
             manifest.Build.Frameworks.Add("net10.0");
             manifest.Build.Runtimes.AddRange(rids);
             ArtifactInfo artifact = new ArtifactInfo { Id = cfg.Artifact, Csproj = "src/Mux." + (kind == ArtifactKind.Gui ? "Desktop/Mux.Desktop" : "Cli/Mux.Cli") + ".csproj", Kind = kind };
             manifest.Build.Artifacts.Add(artifact);
-            manifest.Signing = new SigningInfo
+            manifest.Signing = !signed ? new SigningInfo { Linux = new SigningEntry { VaultRef = "GPG_SIGNING" } } : new SigningInfo
             {
                 MacOs = new SigningEntry { VaultRef = "APPLE_SIGNING", Notarize = true },
                 Windows = new SigningEntry { VaultRef = "WINDOWS_SIGNING" },

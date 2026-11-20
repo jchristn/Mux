@@ -1,47 +1,73 @@
 name: release
 
-# Releases are manual: run this workflow from the Actions tab (or `gh workflow run release.yml -f
-# version=1.2.0`); pushes and tags never start it. It fans out to windows/macos/ubuntu runners. Each runner
-# builds the self-contained artifacts it owns, invokes Mux.Publisher for the channels the manifest assigns
-# to its OS, signs natively, and uploads to the v<version> GitHub Release. The version is supplied here and
-# never stored in publisher.json.
+# Publishing a release is one action: push a v<version> tag on the commit to release.
 #
-# With publish off (release-check.yml calls it that way) every channel still runs with the real packaging
-# tools, but no secret reaches the runners, so every push and signing step skips itself, and nothing is
-# uploaded or tagged. That catches packaging failures before a real release does.
+#   git tag -a v2.0.0 -m "Mux 2.0.0" && git push origin v2.0.0
+#
+# The version comes from <Version> in src/Mux.Cli/Mux.Cli.csproj; the tag must be exactly v plus that version,
+# and CHANGELOG.md must have a non-empty "## [<version>]" section, or nothing is published.
+#
+# Fan out, then fan in: one job per OS builds that OS's installers with its native tools (Mux.Publisher, one
+# channel at a time, no secrets) and uploads them as workflow artifacts; one verify job per OS installs them and
+# runs `mux --version`; only when every platform has built and verified does the release job create the GitHub
+# Release, with one SHA256SUMS over every asset and notes built from .github/release-install-notes.md plus the
+# changelog section. A failure on any OS publishes nothing.
+#
+# Running this workflow by hand (Actions tab, or `gh workflow run release.yml --ref main`) is a dry run: it
+# builds and verifies everything and stops before the release job. release-check.yml calls it the same way on
+# pushes to main that touch packaging.
+#
+# Package managers (NuGet, winget, Chocolatey, Scoop, Homebrew, apt/yum) run after the release, only when the
+# repository variable ENABLE_PACKAGE_MANAGERS is "true" and only for the channels whose secrets are set.
 
 on:
+  push:
+    tags: ['v*']
   workflow_dispatch:
-    inputs:
-      version:
-        description: 'Release version, e.g. 0.10.0 (no leading v)'
-        required: true
-      publish:
-        description: 'Upload to the GitHub Release and push to package managers (off: package only)'
-        type: boolean
-        default: true
   workflow_call:
-    inputs:
-      version:
-        type: string
-        required: true
-      publish:
-        type: boolean
-        default: false
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
 
 jobs:
   version:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.resolve.outputs.version }}
+      publish: ${{ steps.resolve.outputs.publish }}
     steps:
+      - uses: actions/checkout@v7
+
       - id: resolve
+        name: Resolve the version and check the tag and changelog
         shell: bash
         run: |
-          echo "version=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          version=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' src/Mux.Cli/Mux.Cli.csproj | head -1)
+          [ -n "$version" ] || { echo "::error::Could not read <Version> from src/Mux.Cli/Mux.Cli.csproj."; exit 1; }
+          publish=false
+          if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            publish=true
+            if [ "$GITHUB_REF_NAME" != "v$version" ]; then
+              echo "::error::Tag $GITHUB_REF_NAME does not match the project version $version (expected v$version)."
+              exit 1
+            fi
+          fi
+          if ! bash .github/scripts/release-notes.sh "$version" --check; then
+            if [ "$publish" = "true" ]; then exit 1; fi
+            echo "::warning::CHANGELOG.md has no non-empty ## [$version] section; a tagged release would fail here."
+          fi
+          echo "Version $version (publish: $publish)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
 
   package:
     needs: version
@@ -58,17 +84,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       MUX_RELEASE_VERSION: ${{ needs.version.outputs.version }}
-      # Channel tokens (passed straight through; the drivers reference these names). Empty when publish is
-      # off, so the push and signing steps that need them are skipped.
-      NUGET_API_KEY: ${{ inputs.publish && secrets.NUGET_API_KEY || '' }}
-      WINGET_TOKEN: ${{ inputs.publish && secrets.WINGET_TOKEN || '' }}
-      CHOCO_API_KEY: ${{ inputs.publish && secrets.CHOCO_API_KEY || '' }}
-      # Linux repo-metadata GPG key id (free, self-generated; read by the apt/yum drivers).
-      GPG_SIGNING_KEYID: ${{ inputs.publish && secrets.GPG_KEYID || '' }}
-      # NOTE: no Windows Authenticode or Apple Developer certificate is configured, so publisher.json
-      # omits those signing entries. Windows installers ship unsigned (SmartScreen warns) and the macOS
-      # .dmg ships unsigned (users right-click -> Open on first launch). To enable later, restore the
-      # 'windows'/'macOs' entries in publisher.json and add the corresponding cert secrets + prep steps.
     steps:
       - uses: actions/checkout@v7
 
@@ -79,51 +94,32 @@ jobs:
             8.0.x
             10.0.x
 
-      # --- Linux packaging toolchain -------------------------------------------------------------
+      # Each job installs its own packaging tools; nothing relies on what the runner image happens to have.
+      - name: Install Windows packaging tools
+        if: matrix.job == 'windows'
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+          "C:\Program Files (x86)\Inno Setup 6" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
       - name: Install Linux packaging tools
         if: matrix.job == 'linux'
         shell: bash
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ruby ruby-dev build-essential rpm createrepo-c dpkg-dev apt-utils libfuse2
-          sudo gem install --no-document fpm
-          curl -L -o /usr/local/bin/appimagetool \
-            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage" || true
-          sudo chmod +x /usr/local/bin/appimagetool || true
-
-      - name: Import GPG signing key (Linux)
-        if: matrix.job == 'linux' && inputs.publish
-        shell: bash
         env:
-          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+          DEBIAN_FRONTEND: noninteractive
         run: |
-          if [ -n "${GPG_PRIVATE_KEY:-}" ]; then
-            echo "$GPG_PRIVATE_KEY" | gpg --batch --import
-          else
-            echo "No GPG_PRIVATE_KEY secret; apt/yum metadata will be unsigned."
-          fi
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev build-essential rpm createrepo-c dpkg-dev apt-utils gnupg
+          sudo gem install --no-document fpm
+          sudo curl -fsSL -o /usr/local/bin/appimagetool \
+            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage"
+          sudo chmod +x /usr/local/bin/appimagetool
 
-      # macOS code signing / notarization is intentionally not configured (no Apple Developer cert):
-      # the .dmg ships unsigned and users right-click -> Open on first launch.
+      # macOS needs no extra tools: codesign, pkgbuild, productbuild, hdiutil, and plutil ship with Xcode's
+      # command-line tools on macos-latest. No Developer ID is configured (by policy), so the app is ad-hoc
+      # signed and the .pkg and .dmg are not notarized; Windows installers are unsigned.
 
-      - name: Generate macOS icon (icns)
-        if: matrix.job == 'macos'
-        shell: bash
-        run: |
-          # Best-effort: derive assets/icon-green.icns from the png so the dmg driver can bundle it.
-          if [ ! -f assets/icon-green.icns ] && [ -f assets/icon-green.png ]; then
-            ICONSET="$RUNNER_TEMP/mux.iconset"; mkdir -p "$ICONSET"
-            for s in 16 32 128 256 512; do
-              sips -z $s $s assets/icon-green.png --out "$ICONSET/icon_${s}x${s}.png" >/dev/null 2>&1 || true
-              d=$((s*2)); sips -z $d $d assets/icon-green.png --out "$ICONSET/icon_${s}x${s}@2x.png" >/dev/null 2>&1 || true
-            done
-            iconutil -c icns "$ICONSET" -o assets/icon-green.icns || true
-          fi
-
-      # Windows Authenticode signing is intentionally not configured (no certificate): the .exe/.msi
-      # ship unsigned and SmartScreen shows a "More info -> Run anyway" prompt on first run.
-
-      # --- Build the orchestrator once -----------------------------------------------------------
       - name: Build Mux.Publisher
         shell: bash
         run: dotnet build src/Mux.Publisher/Mux.Publisher.csproj -c Release -f net10.0
@@ -132,7 +128,8 @@ jobs:
         shell: bash
         run: dotnet src/Mux.Publisher/bin/Release/net10.0/Mux.Publisher.dll --validate
 
-      # --- Run every channel this OS owns, in dependency order -----------------------------------
+      # Every enabled channel for this OS, in dependency order. No secrets reach this job, so package-manager
+      # channels only build their manifests and archives; their pushes skip themselves.
       - name: Package channels
         shell: bash
         run: |
@@ -146,46 +143,210 @@ jobs:
             echo "::endgroup::"
           done
 
-      - name: Generate checksums
+      - name: List release assets
         shell: bash
         run: |
           set -euo pipefail
-          cd dist/release
-          : > "SHA256SUMS-${{ matrix.job }}.txt"
-          for d in windows macos linux nuget; do
-            [ -d "$d" ] || continue
-            find "$d" -maxdepth 1 -type f ! -name '*.txt' -print0 \
-              | while IFS= read -r -d '' f; do
-                  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$f"; else shasum -a 256 "$f"; fi
-                done >> "SHA256SUMS-${{ matrix.job }}.txt"
+          mkdir -p dist/assets
+          for d in windows macos linux; do
+            [ -d "dist/release/$d" ] || continue
+            find "dist/release/$d" -maxdepth 1 -type f -exec cp {} dist/assets/ \;
           done
-          cat "SHA256SUMS-${{ matrix.job }}.txt" || true
+          if [ -d dist/release/nuget ]; then find dist/release/nuget -maxdepth 1 -name '*.nupkg' -exec cp {} dist/assets/ \; ; fi
+          ls -la dist/assets
 
-      - name: Upload artifacts to the release
-        if: inputs.publish
+      - name: Upload installers
+        uses: actions/upload-artifact@v7
+        with:
+          name: installers-${{ matrix.job }}
+          path: dist/assets/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+  verify:
+    needs: [version, package]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            job: windows
+          - os: macos-latest
+            job: macos
+          - os: ubuntu-latest
+            job: linux
+    runs-on: ${{ matrix.os }}
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/download-artifact@v7
+        with:
+          name: installers-${{ matrix.job }}
+          path: dist
+
+      - name: Install and run (Windows)
+        if: matrix.job == 'windows'
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $setup = "dist\mux-$env:V-win-x64-setup.exe"
+          $p = Start-Process -FilePath $setup -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/SP-' -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "Setup exited with $($p.ExitCode)" }
+          $dir = 'C:\Program Files\mux'
+          foreach ($f in 'Mux.Desktop.exe', 'Mux.Agent.exe', 'mux.exe') {
+            if (-not (Test-Path (Join-Path $dir $f))) { throw "$f is missing from $dir" }
+          }
+          $machinePath = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+          if ($machinePath -notlike "*$dir*") { throw "The install folder is not on the system PATH" }
+          $out = & (Join-Path $dir 'mux.exe') --version
+          Write-Output $out
+          if ("$out" -notlike "*$env:V*") { throw "mux --version did not report $env:V" }
+          $u = Start-Process -FilePath (Join-Path $dir 'unins000.exe') -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($u.ExitCode -ne 0) { throw "Uninstall exited with $($u.ExitCode)" }
+          Write-Output "Installed, ran, and uninstalled mux $env:V."
+
+      - name: Install and run (macOS)
+        if: matrix.job == 'macos'
+        shell: bash
+        run: |
+          set -euo pipefail
+          pkg="dist/mux-$V-osx-arm64.pkg"
+          pkgutil --expand "$pkg" "$RUNNER_TEMP/pkg-expanded"
+          grep -q '<license file="license.txt"' "$RUNNER_TEMP/pkg-expanded/Distribution"
+          sudo installer -pkg "$pkg" -target /
+          test -x /Applications/mux.app/Contents/MacOS/Mux.Agent
+          test -L /usr/local/bin/mux
+          out=$(/usr/local/bin/mux --version); echo "$out"
+          case "$out" in *"$V"*) ;; *) echo "::error::mux --version did not report $V"; exit 1 ;; esac
+          codesign --verify --deep --strict --verbose=2 /Applications/mux.app
+          # An ad-hoc build is expected to be "rejected" with "no usable signature"; "damaged" or "invalid" means
+          # the ad-hoc signing step is broken and downloads would hit the dead-end "damaged" dialog.
+          spctl_out=$(spctl --assess --verbose=4 /Applications/mux.app 2>&1 || true); echo "$spctl_out"
+          case "$spctl_out" in *damaged*|*invalid*) echo "::error::Gatekeeper reports a broken signature"; exit 1 ;; esac
+          mnt="$RUNNER_TEMP/dmg"; mkdir -p "$mnt"
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "dist/mux-$V-osx-arm64.dmg"
+          ls -la "$mnt"
+          test -d "$mnt/mux.app" && test -L "$mnt/Applications" && test -f "$mnt/If mux won't open.txt"
+          codesign --verify --deep --strict "$mnt/mux.app"
+          hdiutil detach "$mnt"
+          echo "Installed the .pkg, ran mux $V, and checked the .dmg."
+
+      - name: Install and run (Linux)
+        if: matrix.job == 'linux'
+        shell: bash
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y "./dist/mux_${V}_amd64.deb"
+          out=$(mux --version); echo "$out"
+          case "$out" in *"$V"*) ;; *) echo "::error::mux --version did not report $V"; exit 1 ;; esac
+          test -f /etc/xdg/autostart/ai.latticetech.mux.agent.desktop
+          test -f /usr/share/applications/ai.latticetech.mux.desktop
+          test -f /usr/share/icons/hicolor/256x256/apps/ai.latticetech.mux.png
+          test -f /usr/share/doc/mux/copyright
+          sudo apt-get remove -y mux
+          docker run --rm -v "$PWD/dist:/dist:ro" fedora:42 bash -c \
+            "dnf install -y /dist/mux-${V}-1.x86_64.rpm >/dev/null && mux --version | grep -F '$V' && test -f /etc/xdg/autostart/ai.latticetech.mux.agent.desktop"
+          chmod +x "dist/mux-${V}-x86_64.AppImage"
+          (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/dist/mux-${V}-x86_64.AppImage" --appimage-extract >/dev/null)
+          test -f "$RUNNER_TEMP/squashfs-root/.DirIcon" && test -f "$RUNNER_TEMP/squashfs-root/ai.latticetech.mux.desktop"
+          "$RUNNER_TEMP/squashfs-root/usr/bin/mux" --version | grep -F "$V"
+          echo "Installed the .deb and .rpm, ran mux $V, and checked the AppImage."
+
+  release:
+    needs: [version, package, verify]
+    if: needs.version.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    env:
+      V: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          pattern: installers-*
+          merge-multiple: true
+          path: assets
+
+      - name: Checksums and notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          [ "$GITHUB_REF_NAME" = "v$V" ] || { echo "::error::Tag $GITHUB_REF_NAME does not match v$V"; exit 1; }
+          bash .github/scripts/release-notes.sh "$V" > "$RUNNER_TEMP/notes.md"
+          (cd assets && sha256sum -- * > SHA256SUMS && cat SHA256SUMS)
+          ls -la assets
+
+      - name: Create the GitHub Release
         uses: softprops/action-gh-release@v3
         with:
-          tag_name: v${{ needs.version.outputs.version }}
-          files: |
-            dist/release/windows/*
-            dist/release/macos/*
-            dist/release/linux/*
-            dist/release/nuget/*.nupkg
-            dist/release/SHA256SUMS-*.txt
-          fail_on_unmatched_files: false
+          tag_name: v${{ env.V }}
+          name: Mux ${{ env.V }}
+          body_path: ${{ runner.temp }}/notes.md
+          files: assets/*
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: ${{ contains(env.V, '-') }}
+          make_latest: ${{ !contains(env.V, '-') }}
 
-  # A single line the maintainer sees: which surfaces end at an external review gate and are not yet live.
-  report:
-    needs: [ version, package ]
-    if: inputs.publish
-    runs-on: ubuntu-latest
+  package-managers:
+    needs: [version, release]
+    if: needs.version.outputs.publish == 'true' && vars.ENABLE_PACKAGE_MANAGERS == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            job: windows
+          - os: macos-latest
+            job: macos
+          - os: ubuntu-latest
+            job: linux
+    runs-on: ${{ matrix.os }}
+    env:
+      MUX_RELEASE_VERSION: ${{ needs.version.outputs.version }}
+      NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+      CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+      GPG_SIGNING_KEYID: ${{ secrets.GPG_KEYID }}
     steps:
-      - shell: bash
+      - uses: actions/checkout@v7
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      # The channels read the installers' checksums from the output folder, so start from the built assets.
+      - uses: actions/download-artifact@v7
+        with:
+          name: installers-${{ matrix.job }}
+          path: dist/release/${{ matrix.job }}
+
+      - name: Import GPG signing key (Linux)
+        if: matrix.job == 'linux'
+        shell: bash
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
         run: |
-          echo "Release v${{ needs.version.outputs.version }} packaged."
-          echo "Pending EXTERNAL review (not yet live until approved/merged):"
-          echo "  - winget:     PR into microsoft/winget-pkgs must be merged"
-          echo "  - chocolatey: package must clear the community moderation queue"
-          echo "  - flathub/snap (if enabled): store review"
-          echo "apt/yum repos (dist/release/apt, dist/release/yum) must be deployed to your repo host,"
-          echo "and the Homebrew tap / Scoop bucket commits pushed to their repositories."
+          if [ -n "${GPG_PRIVATE_KEY:-}" ]; then echo "$GPG_PRIVATE_KEY" | gpg --batch --import; else echo "No GPG_PRIVATE_KEY secret; apt/yum metadata will be unsigned."; fi
+
+      # Package-manager channels reference the release's assets by URL and checksum, so they run after it is
+      # public. Each push skips itself when its secret is missing.
+      - name: Publish to package managers
+        shell: bash
+        run: |
+          set -euo pipefail
+          dotnet build src/Mux.Publisher/Mux.Publisher.csproj -c Release -f net10.0
+          PUB="src/Mux.Publisher/bin/Release/net10.0/Mux.Publisher.dll"
+          for ch in $(dotnet "$PUB" --package-managers-for ${{ matrix.job }}); do
+            echo "::group::channel $ch"
+            dotnet "$PUB" --channel "$ch" --version "$MUX_RELEASE_VERSION"
+            echo "::endgroup::"
+          done
+          echo "winget PRs, Chocolatey moderation, and repository hosting are review gates; check each before calling it live."

@@ -200,6 +200,7 @@ namespace Mux.Publisher
                 if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase)
                     || name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase)
                     || name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase)
+                    || name.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase)
                     || name.EndsWith(".deb", StringComparison.OrdinalIgnoreCase)
                     || name.EndsWith(".rpm", StringComparison.OrdinalIgnoreCase)
                     || name.EndsWith(".AppImage", StringComparison.OrdinalIgnoreCase)

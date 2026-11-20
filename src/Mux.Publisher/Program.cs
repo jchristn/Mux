@@ -49,6 +49,14 @@ namespace Mux.Publisher
                     return Validate(repoRoot);
                 }
 
+                if (options.TryGetValue("package-managers-for", out string? pmOs))
+                {
+                    PublisherManifest m = PublisherManifest.Parse(File.ReadAllText(Path.Combine(repoRoot, "publisher.json")));
+                    List<string> pm = ChannelPlacement.ChannelsFor(m, pmOs).FindAll(c => ChannelPlacement.IsPackageManager(c, m.Channels[c]));
+                    Console.WriteLine(string.Join(" ", pm));
+                    return 0;
+                }
+
                 if (options.TryGetValue("channels-for", out string? osArg))
                 {
                     PublisherManifest m = PublisherManifest.Parse(File.ReadAllText(Path.Combine(repoRoot, "publisher.json")));
@@ -177,6 +185,8 @@ namespace Mux.Publisher
             Console.WriteLine("Usage:");
             Console.WriteLine("  Mux.Publisher --channel <name> --version <X.Y.Z> [--repo <dir>] [--out <dir>] [--staging <dir>] [--framework <net8.0|net10.0>] [--dry-run] [--force]");
             Console.WriteLine("  Mux.Publisher --list        List known channels");
+            Console.WriteLine("  Mux.Publisher --channels-for <os>           Enabled channels for windows|macos|linux, in run order");
+            Console.WriteLine("  Mux.Publisher --package-managers-for <os>   Only the package-manager channels among them");
             Console.WriteLine("  Mux.Publisher --validate    Validate publisher.json");
             Console.WriteLine();
             Console.WriteLine("Channels: " + string.Join(", ", DriverRegistry.KnownChannels));

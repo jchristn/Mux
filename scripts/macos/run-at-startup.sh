@@ -22,8 +22,12 @@ command -v dotnet >/dev/null 2>&1 || die "dotnet was not found on PATH. Install 
 resolve_framework "$@"
 shift "$FRAMEWORK_ARGS"
 [ "$#" -eq 0 ] || die "Unexpected argument: $1"
-LABEL="com.jchristn.mux.agent"
+LABEL="ai.latticetech.mux.agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+# mux 1.x registered the agent under this label; remove it so only one agent starts at login.
+LEGACY_LABEL="com.jchristn.mux.agent"
+launchctl bootout "gui/$(id -u)/$LEGACY_LABEL" 2>/dev/null || true
+rm -f "$HOME/Library/LaunchAgents/$LEGACY_LABEL.plist"
 
 # Stop a launchd-managed copy first (so the app can be replaced), and wait until launchd lets it go;
 # bootstrapping again too early fails with "Bootstrap failed: 5: Input/output error".

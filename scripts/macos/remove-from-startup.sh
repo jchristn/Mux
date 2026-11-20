@@ -22,8 +22,16 @@ MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
 
-LABEL="com.jchristn.mux.agent"
+LABEL="ai.latticetech.mux.agent"
 PLIST="$HOME/Library/LaunchAgents/$LABEL.plist"
+# mux 1.x registered the agent under this label.
+LEGACY_LABEL="com.jchristn.mux.agent"
+LEGACY_PLIST="$HOME/Library/LaunchAgents/$LEGACY_LABEL.plist"
+if [ -f "$LEGACY_PLIST" ]; then
+    launchctl bootout "gui/$(id -u)/$LEGACY_LABEL" 2>/dev/null || launchctl unload -w "$LEGACY_PLIST" 2>/dev/null || true
+    rm -f "$LEGACY_PLIST"
+    echo "Removed $LEGACY_PLIST."
+fi
 
 if [ ! -f "$PLIST" ]; then
     echo "The agent is not registered to run at login; nothing to do."

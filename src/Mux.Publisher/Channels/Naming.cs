@@ -82,6 +82,16 @@ namespace Mux.Publisher.Channels
             return Stem(project, version, rid) + ".dmg";
         }
 
+        /// <summary>The macOS installer package name: <c>&lt;project&gt;-&lt;version&gt;-&lt;rid&gt;.pkg</c>.</summary>
+        /// <param name="project">The project name.</param>
+        /// <param name="version">The release version.</param>
+        /// <param name="rid">The runtime identifier.</param>
+        /// <returns>The file name.</returns>
+        public static string Pkg(string project, string version, string rid)
+        {
+            return Stem(project, version, rid) + ".pkg";
+        }
+
         /// <summary>The Debian package file name (<c>&lt;project&gt;_&lt;version&gt;_&lt;arch&gt;.deb</c>).</summary>
         /// <param name="project">The project name.</param>
         /// <param name="version">The release version.</param>

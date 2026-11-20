@@ -130,24 +130,40 @@ exclusive, and a conversation started in one resumes in another.
 
 ### Download an installer
 
-Installers for macOS, Windows, and Linux are attached to every release on the
-[GitHub Releases page](https://github.com/jchristn/Mux/releases). They are self-contained, so no .NET SDK is needed.
+Installers for macOS, Windows, and Linux are on the
+[latest release](https://github.com/jchristn/Mux/releases/latest). They are self-contained, so no .NET SDK is needed.
+Each one installs the desktop app, the `mux` command, and the tray agent, which starts when you log in.
 
 | OS | Download | Notes |
 | --- | --- | --- |
-| macOS (Apple silicon or Intel) | `mux-<version>-osx-arm64.dmg` or `-osx-x64.dmg` | Drag Mux to Applications |
-| Windows (x64 or arm64) | `mux-<version>-win-x64-setup.exe` or `-win-arm64-setup.exe` | Run the installer |
-| Linux (x64 or arm64) | `.deb`, `.rpm`, `.AppImage`, or `.tar.gz` | `sudo apt install ./mux_<version>_amd64.deb`, `sudo dnf install ./mux-<version>-1.x86_64.rpm`, or `chmod +x` the AppImage |
-| CLI only, any OS | `mux-<version>-<os>-<arch>.tar.gz` / `.zip`, or `Mux.Cli.<version>.nupkg` | Unpack and put `mux` on your `PATH` |
+| macOS (Apple silicon or Intel) | `mux-<version>-osx-arm64.pkg` or `-osx-x64.pkg` (recommended) | Installs mux, adds `mux` to your PATH, and starts the tray agent. A `.dmg` is also available for drag-and-drop installs. |
+| Windows (x64 or arm64) | `mux-<version>-win-x64-setup.exe` or `-win-arm64-setup.exe` | Adds `mux` to your PATH |
+| Linux (x64 or arm64) | `.deb`, `.rpm`, or `.AppImage` | `sudo apt install ./mux_<version>_amd64.deb`, `sudo dnf install ./mux-<version>-1.x86_64.rpm`, or `chmod +x` the AppImage |
+| CLI only, any OS | `mux-<version>-<rid>.tar.gz` / `.zip`, or `Mux.Cli.<version>.nupkg` | Unpack and put `mux` on your `PATH` |
 
-Each release also lists `SHA256SUMS-*.txt` checksums.
+Every release has one `SHA256SUMS` file covering every download. [INSTALL.md](INSTALL.md) has the full steps,
+uninstalling, and checksum verification.
 
-The installers are not code-signed, so the first launch needs one extra step:
+> [!IMPORTANT]
+> **These builds are not code-signed, so Windows and macOS block the first launch.** This is expected and does not
+> mean the download is damaged. mux is free, open-source software, and signing certificates are an ongoing cost we
+> choose not to pass on. To confirm a file is the one published, check it against `SHA256SUMS`.
 
-- **macOS:** if macOS says Mux "cannot be opened" or "is damaged", open System Settings, Privacy & Security, and
-  click **Open Anyway** next to the Mux message. Or run `xattr -dr com.apple.quarantine /Applications/Mux.app`.
-- **Windows:** when SmartScreen shows "Windows protected your PC", click **More info**, then **Run anyway**.
-- **Linux:** packages install normally; make an AppImage executable with `chmod +x` before running it.
+- **macOS:** macOS shows *"mux" Not Opened. Apple could not verify "mux" is free of malware that may harm your Mac or
+  compromise your privacy.* with **Move to Trash** and **Done** buttons. To open it anyway:
+  1. Click **Done**. Do not click Move to Trash.
+  2. Open **System Settings > Privacy & Security** and scroll down to **Security**.
+  3. Next to *"mux" was blocked to protect your Mac*, click **Open Anyway**. The button only appears for about an
+     hour after the blocked attempt; if it is missing, try to open mux again first.
+  4. Click **Open Anyway** again in the dialog that follows and enter your password. You only do this once.
+
+  Or skip the prompt in Terminal: `xattr -dr com.apple.quarantine ~/Downloads/mux-<version>-osx-arm64.pkg` before
+  opening the `.pkg`, or `xattr -dr com.apple.quarantine /Applications/mux.app` after copying the app from the
+  `.dmg`. On macOS 15 and later, Control-click > **Open** no longer bypasses this prompt.
+- **Windows:** "Windows protected your PC": click **More info**, then **Run anyway**. If your browser warns that the
+  file *isn't commonly downloaded*, choose **Keep**. For a `.zip`, run `Unblock-File` on it (or right-click >
+  Properties > Unblock) before extracting.
+- **Linux:** no prompt. Make an AppImage executable with `chmod +x` before running it.
 
 To build from source instead, follow the steps below.
 
@@ -288,11 +304,11 @@ To pin a released version without building, download the self-contained CLI arch
 .NET runtime:
 
 ```bash
-curl -fsSL https://github.com/jchristn/mux/releases/download/v1.5.0/mux-1.5.0-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
+curl -fsSL https://github.com/jchristn/mux/releases/download/v2.0.0/mux-2.0.0-linux-x64.tar.gz | tar xz -C /usr/local/bin mux
 ```
 
 Archives are `mux-<version>-<rid>.tar.gz` for `linux-x64`, `linux-arm64`, `osx-x64`, and `osx-arm64`, and
-`mux-<version>-win-x64.zip` for Windows. Each release also lists their SHA-256 sums in `SHA256SUMS-*.txt`.
+`mux-<version>-win-x64.zip` and `-win-arm64.zip` for Windows. Each release lists every file's SHA-256 in `SHA256SUMS`.
 
 On first run mux seeds `~/.mux/endpoints.json` (a default local Ollama endpoint) and `~/.mux/settings.json`.
 Set `MUX_CONFIG_DIR` before first launch if you want an isolated config directory. The full walkthrough is in

@@ -15,11 +15,32 @@ namespace Mux.Core.Startup
     /// </summary>
     public static class StartupRegistrar
     {
-        /// <summary>The launchd/systemd label and Run-key value name used for the agent.</summary>
-        public const string Label = "com.jchristn.mux.agent";
+        /// <summary>The launchd label (and the Linux unit and autostart entry name): reverse-DNS under the publisher.</summary>
+        public const string Label = "ai.latticetech.mux.agent";
 
-        /// <summary>The Windows HKCU Run value name.</summary>
-        public const string WindowsRunValueName = "MuxAgent";
+        /// <summary>The launchd label mux 1.x registered. Migrated to <see cref="Label"/> on upgrade.</summary>
+        public const string LegacyLabel = "com.jchristn.mux.agent";
+
+        /// <summary>The Windows <c>Run</c> value name.</summary>
+        public const string WindowsRunValueName = "Mux Agent";
+
+        /// <summary>The Windows <c>Run</c> value name mux 1.x used. Migrated on upgrade.</summary>
+        public const string LegacyWindowsRunValueName = "MuxAgent";
+
+        /// <summary>The systemd user unit file name.</summary>
+        public const string LinuxUnitFileName = Label + ".service";
+
+        /// <summary>The XDG autostart entry file name (per user, and the one the .deb/.rpm installs system-wide).</summary>
+        public const string LinuxAutostartFileName = Label + ".desktop";
+
+        /// <summary>The systemd user unit mux 1.x registered.</summary>
+        public const string LegacyLinuxUnitFileName = "mux-agent.service";
+
+        /// <summary>The autostart entry mux 1.x registered.</summary>
+        public const string LegacyLinuxAutostartFileName = "mux-agent.desktop";
+
+        /// <summary>Where the .deb/.rpm installs the system-wide autostart entry; when present, the package starts the agent.</summary>
+        public const string LinuxSystemAutostartPath = "/etc/xdg/autostart/" + LinuxAutostartFileName;
 
         /// <summary>The marker file (under the config directory) recording that first-run registration ran.</summary>
         public const string MarkerFileName = "startup-registered";
@@ -42,6 +63,10 @@ namespace Mux.Core.Startup
 
             string? optOut = Environment.GetEnvironmentVariable(OptOutEnvVar);
             if (string.Equals(optOut, "0", StringComparison.Ordinal)) return false;
+
+            // An upgrade from mux 1.x moves a registration made under the old names to the new ones, even when the
+            // marker says registration already happened (a user who unregistered has no legacy entry to move).
+            MigrateLegacy(executablePath);
 
             string marker = Path.Combine(configDirectory, MarkerFileName);
             try
@@ -102,6 +127,13 @@ namespace Mux.Core.Startup
             Directory.CreateDirectory(Path.GetDirectoryName(plistPath)!);
             File.WriteAllText(plistPath, BuildLaunchAgentPlist(executablePath));
 
+            // launchd started this process under the label already (the .pkg installs and starts the agent): the
+            // job is loaded, and a bootout here would stop this very process.
+            if (string.Equals(Environment.GetEnvironmentVariable("XPC_SERVICE_NAME"), Label, StringComparison.Ordinal))
+            {
+                return true;
+            }
+
             // Load it now so the agent is running after first registration (bootout any stale copy first).
             string uid = GetUidBestEffort();
             RunQuiet("launchctl", new List<string> { "bootout", "gui/" + uid + "/" + Label });
@@ -111,20 +143,126 @@ namespace Mux.Core.Startup
 
         private static bool RegisterLinux(string executablePath)
         {
+            // The .deb/.rpm installs a system-wide autostart entry that starts the agent in every desktop session;
+            // a per-user registration on top of it would start a second copy.
+            if (File.Exists(LinuxSystemAutostartPath)) return true;
+
             string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-            string unitPath = Path.Combine(home, ".config", "systemd", "user", "mux-agent.service");
+            string unitPath = Path.Combine(home, ".config", "systemd", "user", LinuxUnitFileName);
             Directory.CreateDirectory(Path.GetDirectoryName(unitPath)!);
             File.WriteAllText(unitPath, BuildSystemdUserUnit(executablePath));
 
             bool systemd = RunQuiet("systemctl", new List<string> { "--user", "daemon-reload" })
-                           && RunQuiet("systemctl", new List<string> { "--user", "enable", "--now", "mux-agent" });
+                           && RunQuiet("systemctl", new List<string> { "--user", "enable", "--now", LinuxUnitFileName });
             if (systemd) return true;
 
             // Fallback: a desktop autostart entry when systemd --user is unavailable.
-            string desktopPath = Path.Combine(home, ".config", "autostart", "mux-agent.desktop");
+            string desktopPath = Path.Combine(home, ".config", "autostart", LinuxAutostartFileName);
             Directory.CreateDirectory(Path.GetDirectoryName(desktopPath)!);
             File.WriteAllText(desktopPath, BuildAutostartDesktopEntry(executablePath));
             return File.Exists(desktopPath);
+        }
+
+        /// <summary>
+        /// Moves a mux 1.x login registration (the <see cref="LegacyLabel"/> LaunchAgent, the
+        /// <see cref="LegacyWindowsRunValueName"/> Run value, or the <c>mux-agent</c> systemd unit or autostart entry)
+        /// to the current names, so an upgraded machine starts exactly one agent at login. It never stops or starts
+        /// the agent, since the caller may be the agent the old registration launched; the new registration takes
+        /// effect at the next login. Best-effort.
+        /// </summary>
+        /// <param name="executablePath">The agent executable to register.</param>
+        /// <returns>True when a legacy registration was found and moved.</returns>
+        public static bool MigrateLegacy(string executablePath)
+        {
+            try
+            {
+                string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX)) return MigrateLegacyMac(home, executablePath);
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return MigrateLegacyLinux(home, executablePath, true);
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return MigrateLegacyWindows(executablePath);
+            }
+            catch
+            {
+                // Migration is a convenience; the agent still runs.
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// macOS migration: writes the LaunchAgent under <see cref="Label"/> and deletes the legacy plist. The
+        /// legacy job stays loaded until logout, so a running agent is not interrupted.
+        /// </summary>
+        /// <param name="home">The user's home directory.</param>
+        /// <param name="executablePath">The agent executable.</param>
+        /// <returns>True when a legacy plist was migrated.</returns>
+        public static bool MigrateLegacyMac(string home, string executablePath)
+        {
+            string agents = Path.Combine(home, "Library", "LaunchAgents");
+            string legacy = Path.Combine(agents, LegacyLabel + ".plist");
+            if (!File.Exists(legacy)) return false;
+
+            string current = Path.Combine(agents, Label + ".plist");
+            if (!File.Exists(current)) File.WriteAllText(current, BuildLaunchAgentPlist(executablePath));
+            File.Delete(legacy);
+            return true;
+        }
+
+        /// <summary>
+        /// Linux migration: removes the legacy systemd unit and autostart entry and registers under the new names,
+        /// unless the package's system-wide autostart entry already starts the agent.
+        /// </summary>
+        /// <param name="home">The user's home directory.</param>
+        /// <param name="executablePath">The agent executable.</param>
+        /// <param name="useSystemctl">Whether to call <c>systemctl --user</c> (off in tests).</param>
+        /// <returns>True when a legacy registration was migrated.</returns>
+        public static bool MigrateLegacyLinux(string home, string executablePath, bool useSystemctl)
+        {
+            string unitDir = Path.Combine(home, ".config", "systemd", "user");
+            string autostartDir = Path.Combine(home, ".config", "autostart");
+            string legacyUnit = Path.Combine(unitDir, LegacyLinuxUnitFileName);
+            string legacyDesktop = Path.Combine(autostartDir, LegacyLinuxAutostartFileName);
+            bool hadUnit = File.Exists(legacyUnit);
+            bool hadDesktop = File.Exists(legacyDesktop);
+            if (!hadUnit && !hadDesktop) return false;
+
+            if (hadUnit)
+            {
+                if (useSystemctl) RunQuiet("systemctl", new List<string> { "--user", "disable", LegacyLinuxUnitFileName });
+                File.Delete(legacyUnit);
+            }
+
+            if (hadDesktop) File.Delete(legacyDesktop);
+
+            if (File.Exists(LinuxSystemAutostartPath)) return true;
+
+            if (hadUnit)
+            {
+                Directory.CreateDirectory(unitDir);
+                File.WriteAllText(Path.Combine(unitDir, LinuxUnitFileName), BuildSystemdUserUnit(executablePath));
+                if (useSystemctl)
+                {
+                    RunQuiet("systemctl", new List<string> { "--user", "daemon-reload" });
+                    RunQuiet("systemctl", new List<string> { "--user", "enable", LinuxUnitFileName });
+                }
+            }
+            else
+            {
+                Directory.CreateDirectory(autostartDir);
+                File.WriteAllText(Path.Combine(autostartDir, LinuxAutostartFileName), BuildAutostartDesktopEntry(executablePath));
+            }
+
+            return true;
+        }
+
+        private static bool MigrateLegacyWindows(string executablePath)
+        {
+            const string RunKey = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run";
+            if (!RunQuiet("reg", new List<string> { "query", RunKey, "/v", LegacyWindowsRunValueName })) return false;
+
+            RunQuiet("reg", BuildWindowsRegArgs(executablePath));
+            RunQuiet("reg", new List<string> { "delete", RunKey, "/v", LegacyWindowsRunValueName, "/f" });
+            return true;
         }
 
         // ----- Pure recipe builders (unit tested) --------------------------------------------------

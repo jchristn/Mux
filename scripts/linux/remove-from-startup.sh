@@ -29,15 +29,22 @@ MUX_CONFIG_HOME="${MUX_CONFIG_DIR:-$HOME/.mux}"
 mkdir -p "$MUX_CONFIG_HOME"
 [ -f "$MUX_CONFIG_HOME/startup-registered" ] || date -u +%Y-%m-%dT%H:%M:%SZ > "$MUX_CONFIG_HOME/startup-registered"
 
-SERVICE="$HOME/.config/systemd/user/mux-agent.service"
-DESKTOP="$HOME/.config/autostart/mux-agent.desktop"
+SERVICE="$HOME/.config/systemd/user/ai.latticetech.mux.agent.service"
+DESKTOP="$HOME/.config/autostart/ai.latticetech.mux.agent.desktop"
+# mux 1.x registered the agent as mux-agent; remove that so only one agent starts at login.
+if [ -f "$HOME/.config/systemd/user/mux-agent.service" ]; then
+    systemctl --user disable --now mux-agent >/dev/null 2>&1 || true
+    rm -f "$HOME/.config/systemd/user/mux-agent.service"
+    systemctl --user daemon-reload >/dev/null 2>&1 || true
+fi
+rm -f "$HOME/.config/autostart/mux-agent.desktop"
 did=0
 
 if [ -f "$SERVICE" ]; then
-    systemctl --user disable --now mux-agent >/dev/null 2>&1 || true
+    systemctl --user disable --now ai.latticetech.mux.agent >/dev/null 2>&1 || true
     rm -f "$SERVICE"
     systemctl --user daemon-reload >/dev/null 2>&1 || true
-    echo "Removed and stopped the mux-agent systemd user service."
+    echo "Removed and stopped the ai.latticetech.mux.agent systemd user service."
     did=1
 fi
 if [ -f "$DESKTOP" ]; then
