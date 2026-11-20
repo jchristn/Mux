@@ -314,5 +314,9 @@
   "Mux Cloud is restarting. mux reconnects when it is back.": "Mux Cloud 正在重启。恢复后 mux 会重新连接。",
   "Too many failed attempts. mux waits before trying again.": "失败次数过多。mux 会等待一段时间后再试。",
   "Mux Cloud did not accept the connection. mux keeps trying.": "Mux Cloud 未接受连接。mux 会继续尝试。",
-  "Mux Cloud: {0}": "Mux Cloud：{0}"
+  "Mux Cloud: {0}": "Mux Cloud：{0}",
+  "Show password": "显示密码",
+  "Hide password": "隐藏密码",
+  "Show key": "显示密钥",
+  "Hide key": "隐藏密钥"
 }

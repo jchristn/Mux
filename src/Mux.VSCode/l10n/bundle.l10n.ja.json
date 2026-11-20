@@ -314,5 +314,9 @@
   "Mux Cloud is restarting. mux reconnects when it is back.": "Mux Cloud を再起動しています。復帰すると mux が再接続します。",
   "Too many failed attempts. mux waits before trying again.": "失敗した試行が多すぎます。mux は少し待ってから再試行します。",
   "Mux Cloud did not accept the connection. mux keeps trying.": "Mux Cloud が接続を受け付けませんでした。mux は再試行を続けます。",
-  "Mux Cloud: {0}": "Mux Cloud: {0}"
+  "Mux Cloud: {0}": "Mux Cloud: {0}",
+  "Show password": "パスワードを表示",
+  "Hide password": "パスワードを隠す",
+  "Show key": "キーを表示",
+  "Hide key": "キーを隠す"
 }

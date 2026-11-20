@@ -27,7 +27,7 @@ namespace Mux.Desktop.Views
         private readonly StackPanel _Body = new StackPanel { Spacing = 10 };
         private readonly DispatcherTimer _Timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         private readonly TextBox _Email = new TextBox();
-        private readonly TextBox _Password = new TextBox { PasswordChar = '•' };
+        private readonly TextBox _Password = PasswordReveal.Attach(new TextBox { PasswordChar = '•' }, AppTheme.Current, isKey: false);
         private readonly TextBox _Server = new TextBox();
         private readonly TextBox _MachineName = new TextBox();
         private readonly TextBlock _Message = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap, IsVisible = false };
@@ -198,6 +198,7 @@ namespace Mux.Desktop.Views
             {
                 _Busy = false;
                 _Password.Text = string.Empty;
+                PasswordReveal.Conceal(_Password);
                 if (error != null)
                 {
                     _Message.Foreground = _Theme.Error;

@@ -41,7 +41,7 @@ namespace Mux.Cli.App
         public CloudLoginModal(string serverUrl, string machineName, string email)
         {
             _Email = new TextField { Value = email ?? string.Empty, Placeholder = "you@example.com" };
-            _Password = new TextField { MaskChar = '•' };
+            _Password = SecretFields.Create();
             _ServerUrl = new TextField { Value = serverUrl ?? string.Empty };
             _MachineName = new TextField { Value = machineName ?? string.Empty };
             _Form = new Form();
@@ -144,7 +144,8 @@ namespace Mux.Cli.App
             }
 
             string? errors = _Host.ErrorSummary;
-            string hint = errors ?? "Tab/↑↓ move · Enter sign in · Esc cancel";
+            string? reveal = SecretFields.Hint(_Form.FocusedLeaf, "password");
+            string hint = errors ?? (reveal == null ? "Tab/↑↓ move · Enter sign in · Esc cancel" : "Tab/↑↓ move · " + reveal + " · Enter sign in · Esc cancel");
             surface.DrawText(contentX, hintRow, hint.Length > contentWidth ? hint.Substring(0, contentWidth) : hint, CellStyle.Default.WithForeground(Color.FromPalette((byte)(errors != null ? 9 : 8))));
         }
 

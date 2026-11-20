@@ -81,7 +81,8 @@ namespace Test.Shared.Suites
                             backend.FeedInput("dev@example.test\tsupersecret");
                             app.PumpInputOnce();
                             app.RenderOnce();
-                            string frame = Screen(backend.TakeOutput(), 120, 40);
+                            string output = backend.TakeOutput();
+                            string frame = Screen(output, 120, 40);
                             MuxAssert.Contains("Mux Cloud", frame, "title");
                             MuxAssert.Contains("Anyone signed in to this Mux Cloud", frame, "notice");
                             MuxAssert.Contains("dev@example.test", frame, "email echoes");
@@ -90,7 +91,32 @@ namespace Test.Shared.Suites
                             MuxAssert.Contains("No account yet? Create one at https://app.usemux.ai/signup", frame, "where to create an account");
                             MuxAssert.Contains("remote-approval off).", frame, "the notice ends with the terminal command");
                             MuxAssert.Contains("(/cloud", frame, "the notice names the terminal command");
+                            MuxAssert.Contains("Ctrl+R show password", frame, "the reveal key is named while the password has focus");
                             Save("tui-cloud-login", frame);
+
+                            // Ctrl+R shows the typed password and the hint flips; Ctrl+R again masks it. Later frames
+                            // can be diffs, so each check replays all output so far onto the grid.
+                            backend.FeedInput("\u0012");
+                            app.PumpInputOnce();
+                            app.RenderOnce();
+                            output += backend.TakeOutput();
+                            string revealed = Screen(output, 120, 40);
+                            MuxAssert.Contains("supersecret", revealed, "Ctrl+R reveals the password");
+                            MuxAssert.Contains("Ctrl+R hide password", revealed, "the hint offers to hide it again");
+                            Save("tui-cloud-login-revealed", revealed);
+                            backend.FeedInput("\u0012");
+                            app.PumpInputOnce();
+                            app.RenderOnce();
+                            output += backend.TakeOutput();
+                            string hidden = Screen(output, 120, 40);
+                            MuxAssert.DoesNotContain("supersecret", hidden, "Ctrl+R masks it again");
+                            MuxAssert.Contains("Ctrl+R show password", hidden, "the hint offers to show it");
+
+                            backend.FeedInput("\t");
+                            app.PumpInputOnce();
+                            app.RenderOnce();
+                            output += backend.TakeOutput();
+                            MuxAssert.DoesNotContain("Ctrl+R", Screen(output, 120, 40), "no reveal hint once the password loses focus");
                         }
                     }).ConfigureAwait(false);
                 }),

@@ -32,7 +32,7 @@ namespace Mux.Desktop.Views
         private readonly ComboBox _Adapter = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _BaseUrl = new TextBox();
         private readonly TextBox _Model = new TextBox();
-        private readonly TextBox _ApiKey = new TextBox { PasswordChar = '●' };
+        private readonly TextBox _ApiKey = PasswordReveal.Attach(new TextBox { PasswordChar = '●' }, AppTheme.Current, isKey: true);
         private readonly ComboBox _AuthPlacement = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _AuthParameterName = new TextBox();
         private readonly TextBox _Region = new TextBox();

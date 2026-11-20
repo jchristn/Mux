@@ -2,7 +2,6 @@ namespace Mux.Cli.Commands
 {
     using System;
     using System.IO;
-    using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Mux.Core.Cloud;
@@ -160,8 +159,9 @@ namespace Mux.Cli.Commands
             }
             else
             {
-                output.Write("Password: ");
-                password = ReadMasked();
+                output.Write("Password (" + MaskedLineReader.RevealHint + "): ");
+                output.Flush();
+                password = MaskedLineReader.Read(() => Console.ReadKey(true), Console.Out);
                 output.WriteLine();
             }
 
@@ -235,25 +235,6 @@ namespace Mux.Cli.Commands
 
                 await Task.Delay(500, token).ConfigureAwait(false);
             }
-        }
-
-        private static string ReadMasked()
-        {
-            StringBuilder sb = new StringBuilder();
-            while (true)
-            {
-                ConsoleKeyInfo key = Console.ReadKey(true);
-                if (key.Key == ConsoleKey.Enter) break;
-                if (key.Key == ConsoleKey.Backspace)
-                {
-                    if (sb.Length > 0) sb.Length--;
-                    continue;
-                }
-
-                if (!char.IsControl(key.KeyChar)) sb.Append(key.KeyChar);
-            }
-
-            return sb.ToString();
         }
 
         #endregion

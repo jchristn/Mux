@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ApiError } from '../api/ApiError';
 import { MuxServerLifecycle } from '../server/lifecycle';
 import { CloudStatusBar } from './CloudStatusBar';
+import { promptPassword } from './passwordInput';
 import { remoteAccessNotice, signupHint, signupUrl, statusSummary } from './cloudText';
 
 /**
@@ -75,12 +76,10 @@ export async function runCloudCommand(lifecycle: MuxServerLifecycle, bar: CloudS
         return;
     }
 
-    const password = await vscode.window.showInputBox({
+    const password = await promptPassword({
         title: vscode.l10n.t('Connect to Mux Cloud'),
         prompt: vscode.l10n.t('Mux Cloud password (sent once, never stored)'),
-        password: true,
-        ignoreFocusOut: true,
-        validateInput: (v) => (v ? undefined : vscode.l10n.t('Enter your password.')),
+        validate: (v) => (v ? undefined : vscode.l10n.t('Enter your password.')),
     });
     if (!password) {
         return;

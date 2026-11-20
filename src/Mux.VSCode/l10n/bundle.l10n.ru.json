@@ -314,5 +314,9 @@
   "Mux Cloud is restarting. mux reconnects when it is back.": "Mux Cloud перезапускается. mux переподключится, когда он снова станет доступен.",
   "Too many failed attempts. mux waits before trying again.": "Слишком много неудачных попыток. mux подождёт перед следующей.",
   "Mux Cloud did not accept the connection. mux keeps trying.": "Mux Cloud не принял подключение. mux продолжает попытки.",
-  "Mux Cloud: {0}": "Mux Cloud: {0}"
+  "Mux Cloud: {0}": "Mux Cloud: {0}",
+  "Show password": "Показать пароль",
+  "Hide password": "Скрыть пароль",
+  "Show key": "Показать ключ",
+  "Hide key": "Скрыть ключ"
 }

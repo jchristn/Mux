@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { PALETTE_UPDATE_SCRIPT, paletteStyleTag } from '../theme/palette';
 import { PaletteService } from '../theme/PaletteService';
 import { copyButtonHtml } from './formCopy';
+import { passwordControlHtml, REVEAL_CSS, REVEAL_SCRIPT } from './passwordReveal';
 
 /**
  * One clause of a field's visibility rule: the field is shown only when the current value of the control named
@@ -131,7 +132,7 @@ export class FormPanel {
   .labelrow { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
   .labelrow label { margin-bottom: 0; }
   button.copy { padding: 2px 10px; }
-</style>
+${REVEAL_CSS}</style>
 ${paletteStyleTag(nonce, PaletteService.css)}
 </head>
 <body>
@@ -175,6 +176,7 @@ ${PALETTE_UPDATE_SCRIPT}
     if (el) { el.addEventListener('change', applyVisibility); el.addEventListener('input', applyVisibility); }
   }
   applyVisibility();
+${REVEAL_SCRIPT}
   // Copy buttons send the control's current text to the extension, which writes the system clipboard.
   for (const button of document.querySelectorAll('button.copy')) {
     button.addEventListener('click', () => {
@@ -235,7 +237,10 @@ ${PALETTE_UPDATE_SCRIPT}
                 control = `<input type="number" id="${id}" value="${FormPanel.escape(String(field.value ?? ''))}" />`;
                 break;
             case 'password':
-                control = `<input type="password" id="${id}" value="" placeholder="${field.value ? '••••••• (unchanged)' : ''}" />`;
+                control = passwordControlHtml(id, field.value ? '••••••• (unchanged)' : '', {
+                    show: vscode.l10n.t('Show key'),
+                    hide: vscode.l10n.t('Hide key'),
+                });
                 break;
             default:
                 control = `<input type="text" id="${id}" value="${FormPanel.escape(String(field.value ?? ''))}" />`;

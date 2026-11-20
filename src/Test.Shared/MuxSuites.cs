@@ -100,6 +100,7 @@ namespace Test.Shared
                     MobileParityRoutesSuite.Create(),
                     CloudCliSuite.Create(),
                     CloudTuiSuite.Create(),
+                    SecretInputSuite.Create(),
                     RunRegistrySuite.Create(),
                     SessionTitleHelperSuite.Create(),
 

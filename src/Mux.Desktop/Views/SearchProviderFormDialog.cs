@@ -20,7 +20,7 @@ namespace Mux.Desktop.Views
         private readonly TextBox _Name = new TextBox();
         private readonly ComboBox _Type = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
         private readonly TextBox _Endpoint = new TextBox();
-        private readonly TextBox _ApiKey = new TextBox { PasswordChar = '●' };
+        private readonly TextBox _ApiKey = PasswordReveal.Attach(new TextBox { PasswordChar = '●' }, AppTheme.Current, isKey: true);
         private readonly TextBox _Timeout = new TextBox();
         private readonly CheckBox _Enabled = new CheckBox { Content = Localizer.T("search.enabled") };
         private readonly CheckBox _IsDefault = new CheckBox { Content = Localizer.T("search.useDefault") };

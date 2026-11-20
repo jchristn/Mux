@@ -314,5 +314,9 @@
   "Mux Cloud is restarting. mux reconnects when it is back.": "O Mux Cloud está reiniciando. O mux se reconecta quando ele voltar.",
   "Too many failed attempts. mux waits before trying again.": "Muitas tentativas com falha. O mux aguarda antes de tentar novamente.",
   "Mux Cloud did not accept the connection. mux keeps trying.": "O Mux Cloud não aceitou a conexão. O mux continua tentando.",
-  "Mux Cloud: {0}": "Mux Cloud: {0}"
+  "Mux Cloud: {0}": "Mux Cloud: {0}",
+  "Show password": "Mostrar senha",
+  "Hide password": "Ocultar senha",
+  "Show key": "Mostrar chave",
+  "Hide key": "Ocultar chave"
 }

@@ -25,10 +25,6 @@ namespace Mux.Cli.App
         private const int PadX = 3;
         private const int PadY = 1;
         private const int ContentWidth = 46;
-        private const char MaskChar = '•';
-
-        // Toggles a masked secret between hidden and shown, so a pasted token can be checked before saving.
-        private static readonly KeyChord RevealKey = KeyChord.Parse("ctrl+r");
 
         // Fixed field indices used to restore focus to a selector after the form is rebuilt.
         private const int TransportFieldIndex = 1;
@@ -73,9 +69,9 @@ namespace Mux.Cli.App
             _Url = new TextField();
             _McpPath = new TextField();
             _AuthType = new RadioGroup(_AuthTypes);
-            _BearerToken = new TextField { MaskChar = MaskChar, RevealKey = RevealKey };
+            _BearerToken = SecretFields.Create();
             _ApiKeyHeader = new TextField();
-            _ApiKeyValue = new TextField { MaskChar = MaskChar, RevealKey = RevealKey };
+            _ApiKeyValue = SecretFields.Create();
 
             _ApiKeyHeader.Value = "X-API-Key";
             _McpPath.Value = "/mcp";
@@ -206,7 +202,9 @@ namespace Mux.Cli.App
             }
             else
             {
-                surface.DrawText(contentX, hintRow, Trim("Tab/↑↓ move · Ctrl+R show secret · Enter save · Esc cancel", contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
+                string? reveal = SecretFields.Hint(_Host.Form.FocusedLeaf, "secret");
+                string hint = reveal == null ? "Tab/↑↓ move · Enter save · Esc cancel" : "Tab/↑↓ move · " + reveal + " · Enter save · Esc cancel";
+                surface.DrawText(contentX, hintRow, Trim(hint, contentWidth), CellStyle.Default.WithForeground(Color.FromPalette(8)));
             }
         }
 

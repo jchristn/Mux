@@ -8,6 +8,12 @@ All notable changes to mux are documented here.
 
 ### Added
 
+- **Show or hide what you typed in password and key fields, everywhere.** The web dashboard (Mux Cloud sign-in, the
+  REST API key, endpoint API keys, MCP secrets) and the desktop app (Mux Cloud sign-in, endpoint, MCP, and search
+  provider keys) have an eye button inside each field, with translated labels. VS Code's Mux Cloud sign-in has an eye
+  button in the input box and its endpoint and MCP forms have one per secret field. In the terminal UI, Ctrl+R shows
+  or hides the focused secret (the footer says so), and the endpoint editor now masks API keys like the other
+  surfaces. `mux cloud login` echoes `*` for each character and Ctrl+R shows the password in place.
 - **REST routes and stream events for desktop parity on other surfaces (the Mux Cloud mobile app first).**
   - `ask_user` questions reach REST clients that opt in with `askUser: true`: an `ask_user` SSE event and run
     frame, answered with `POST /v1.0/api/chat/answer` or an `answer` WebSocket frame (choice labels, free text, or
