@@ -14,11 +14,11 @@
   <a href="https://www.nuget.org/packages/Mux.Core"><img src="https://img.shields.io/nuget/v/Mux.Core.svg" alt="NuGet Mux.Core"></a>
 </p>
 
-[Get started](#getting-started) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
+[Get started](#getting-started) · [Mux Cloud](#mux-cloud) · [Model providers](#model-providers) · [CLI usage](#cli-usage) · [Configuration](#configuration) · [Documentation](#documentation)
 
-Version 2.0.0 adds [Mux Cloud](https://app.usemux.ai): sign a machine in with `mux cloud login` (or from the
-desktop app, dashboard, VS Code, or the tray menu) and use it from any browser or the Mux mobile app as if you
-were at it.
+Version 2.0.0 adds [Mux Cloud](#mux-cloud) ([app.usemux.ai](https://app.usemux.ai)): sign a machine in with
+`mux cloud login` (or from the desktop app, dashboard, VS Code, or the tray menu) and use it from any browser, or
+from the Mux Cloud app for iPhone, iPad, and Android, as if you were at it.
 
 Version 1.8.0 moved the `openai` adapter to OpenAI's Responses API on PolyPrompt 4.0, so every current
 OpenAI model works, including the codex-tuned coding models, and reasoning models keep their reasoning
@@ -53,6 +53,9 @@ and [configuration](docs/CONFIG.md) for setup and Windows behavior.
 - **Local web dashboard** — `mux serve` hosts a loopback, token-guarded REST + WebSocket API and a self-contained single-page dashboard (chat, configuration, usage/pricing analytics, sessions), run in the background by a cross-platform system-tray agent. Web chats persist server-side into the shared session store, so they appear (and resume) in the TUI and desktop app too; read-only by default, `mux serve --allow-tools` lets mutating tools prompt the browser for approval.
 - **Cross-platform desktop app** — `mux Desktop`, an Avalonia client with conversations/threads, streaming chat, the full set of configuration managers, and the usage dashboard.
 - **VS Code extension** — `mux` in the editor: a chat panel with in-editor tool approvals, inline commands and code actions (explain, fix, tests, refactor, commit message), editor context injection, and the shared session store, driven over the local `mux serve` API. Source in `src/Mux.VSCode`; see `docs/VSCODE.md`.
+
+Away from the computer, [Mux Cloud](#mux-cloud) puts those machines in reach of any browser and of the Mux Cloud
+mobile app for iPhone, iPad, and Android.
 
 `mux` does not install or manage model runners. You bring your own local or remote inference backend, and `mux` connects to it.
 
@@ -398,25 +401,86 @@ composer completes slash commands, and endpoint selections leave saved model-swi
 render when opening conversations from other clients. Source lives
 in `src/Mux.VSCode`; the full guide is in [docs/VSCODE.md](docs/VSCODE.md).
 
-### Mux Cloud
+## Mux Cloud
 
-[Mux Cloud](https://github.com/jchristn/MuxCloud) (hosted at [app.usemux.ai](https://app.usemux.ai)) lets you use
-this machine from a browser on another computer or from your phone, exactly as if you were sitting at it: the same
-dashboard, conversations, tool approvals, and settings. Sign in once:
+[Mux Cloud](https://app.usemux.ai) lets you use the mux on your own computers from anywhere: a browser on another
+computer, or the **Mux Cloud** app on your phone or tablet. It is the same mux, with the same conversations, tool
+approvals, endpoints, and settings, as if you were sitting at the machine. The service is free while in alpha, made by
+Lattice AI, and open source ([github.com/jchristn/MuxCloud](https://github.com/jchristn/MuxCloud)).
 
-```text
-mux cloud login          Sign this machine in (email and password; the password is never stored)
-mux cloud status         Show the connection (Not signed in, Off, Connected, Reconnecting, Signed out, ...)
-mux cloud remote-approval off   Refuse tool approvals that come through Mux Cloud
-mux cloud logout         Sign this machine out
-```
+Mux Cloud does not run an agent of its own. mux keeps running on your computer, with your models and your files,
+and Mux Cloud relays between that computer and wherever you are. The computer has to have mux installed, be signed
+in to Mux Cloud, and be turned on.
 
-The same controls are in the terminal UI (`/cloud`), the desktop app (Mux Cloud window), the dashboard (Settings,
-Mux Cloud), VS Code (`mux: Connect to Mux Cloud`), and the tray agent's menu. The tray agent keeps one outbound
-WebSocket open to Mux Cloud, so the machine needs no inbound port. Conversations stay on the machine; Mux Cloud passes
-them through. Anyone signed in to your account can operate the machine remotely, including approving tools, unless
-you turn remote tool approval off. See [docs/CONFIG.md](docs/CONFIG.md#mux-cloud-settingsjson-cloud) and
-[WEBSOCKETS_API.md](WEBSOCKETS_API.md).
+### Connect a machine
+
+1. [Install mux](#getting-started) on the computer (Windows, macOS, or Linux) and set up an endpoint as usual.
+2. Create a free account at [app.usemux.ai](https://app.usemux.ai), or in the mobile app.
+3. Sign the machine in with the same account:
+
+   ```text
+   mux cloud login          Sign this machine in (email and password; the password is never stored)
+   mux cloud status         Show the connection (Not signed in, Off, Connected, Reconnecting, Signed out, Removed)
+   mux cloud remote-approval off   Refuse tool approvals that come through Mux Cloud
+   mux cloud logout         Sign this machine out
+   ```
+
+   The same controls are in the terminal UI (`/cloud`), the desktop app (Mux Cloud window), the dashboard
+   (Settings, Mux Cloud), VS Code (`mux: Connect to Mux Cloud`), and the tray agent's menu.
+
+The process that owns the local hub port, normally the tray agent, keeps one outbound WebSocket open to Mux Cloud, so
+the machine needs no inbound port, port forwarding, or VPN. Sign in as many machines as you like; each one appears
+in your account under its host name (or `cloud.machineName`).
+
+### From a browser
+
+Sign in at [app.usemux.ai](https://app.usemux.ai) to see every machine and whether it is online, busy, or waiting on
+you. Open a machine to get its full mux dashboard, relayed from the machine itself: chat, sessions, tool approvals,
+configuration, and usage. The account pages cover your profile, password, signed-in sessions, removing a machine, and
+deleting the account.
+
+### From your phone or tablet: the Mux Cloud app
+
+The **Mux Cloud** app for iPhone, iPad, and Android is a remote for mux. It needs a computer running mux, connected
+as above; without one it has nothing to show.
+
+- **App Store** (iPhone and iPad): [Mux Cloud](https://apps.apple.com/app/id6837555331)
+- **Google Play** (Android phones and tablets): [Mux Cloud: coding agent](https://play.google.com/store/apps/details?id=ai.usemux.app)
+
+Both listings were submitted for review in November 2026; the links work once the stores publish them.
+
+With it you can:
+
+- See your machines and which are online, busy, or waiting on you.
+- Open any conversation and keep going, or start a new one in any folder on the machine, with any endpoint and model.
+- Watch replies stream in live, including runs started at the computer or on another device.
+- Approve or deny the commands and file edits mux wants to make, and answer the questions it asks while it works.
+- Stop a run, undo a turn's file changes, or switch models mid-conversation.
+- Get a notification when a run needs you or finishes.
+- Manage endpoints and models, MCP servers, prompts, subagents, hooks, commands, skills, memory, worktrees,
+  processes, and project trust, and read the usage and cost dashboards.
+
+The app also has Face ID, Touch ID, or fingerprint lock, light and dark themes, a split view on tablets, and 12
+languages. Its source is `src/MuxCloud.Mobile` in the MuxCloud repository.
+
+### Security and privacy
+
+- **Your code and conversations stay on your machines.** Mux Cloud passes them through and does not store them.
+- **Your account can operate your machines.** Anyone signed in to it can do on a connected machine what you could do
+  at its keyboard in mux, including approving tools that run commands and edit files. Keep the password safe.
+- **Each machine decides about remote approvals.** Turn them off with `mux cloud remote-approval off` (or the same
+  switch on any surface, or `MUX_CLOUD_ALLOW_REMOTE_TOOL_APPROVAL=false`); runs started through Mux Cloud then deny
+  tools that change files or run commands, and local use is unaffected.
+- **Removing access.** `mux cloud logout` on the machine, or removing the machine in Mux Cloud, cuts it off at once.
+
+### Self-hosting
+
+Mux Cloud is open source. To run your own, follow the [MuxCloud README](https://github.com/jchristn/MuxCloud), set
+`cloud.serverUrl` (or `MUX_CLOUD_SERVER_URL`) on each machine, and enter the same server URL on the mobile app's
+sign-in screen.
+
+See [docs/CONFIG.md](docs/CONFIG.md#mux-cloud-settingsjson-cloud) for the `cloud` settings and
+[WEBSOCKETS_API.md](WEBSOCKETS_API.md) for the tunnel protocol.
 
 ## Model providers
 
@@ -974,6 +1038,7 @@ See [CONFIG.md](docs/CONFIG.md) for the full reference.
 - [VS Code extension](docs/VSCODE.md)
 - [REST API](docs/REST_API.md)
 - [WebSockets API](WEBSOCKETS_API.md), including the Mux Cloud tunnel
+- [Mux Cloud](#mux-cloud): use mux from a browser or the Mux Cloud mobile app; service source at [jchristn/MuxCloud](https://github.com/jchristn/MuxCloud)
 - [Observability](TELEMETRY.md): OpenTelemetry metrics, traces, logs, dashboards, and alerts
 - [Authoring skills](docs/SKILLS_AUTHORING.md)
 - [Testing](docs/TESTING.md)
